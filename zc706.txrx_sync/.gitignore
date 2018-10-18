@@ -1,7 +1,0 @@
-*.log
-vivado.jou
-*.cache
-*.hw
-*.runs
-*.srcs
-*.xpr

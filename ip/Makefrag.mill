@@ -1,0 +1,31 @@
+MKDIR ?= mkdir -p
+CURL ?= curl -L
+MILL_DIR ?= $(PWD)/.mill
+MILL_BIN ?= $(MILL_DIR)/mill
+
+MILL ?= $(MILL_BIN) --color false
+MILL_REMOTE_RELEASE ?= https://github.com/ucbjrl/mill/releases/download/v0.2.8-FDF/mill-0.2.8-FDF
+
+# Fetch mill (if we don't have it).
+$(MILL_BIN):
+# @echo $(CURL) --create-dirs --output $@.curl --write-out "%{http_code}" $(MILL_REMOTE_RELEASE)
+	STATUSCODE="$(shell $(CURL) --create-dirs --output $@.curl --write-out "%{http_code}" $(MILL_REMOTE_RELEASE))"
+	$(shell if [ $$STATUSCODE == 200 ] ; then \
+	  mv $@.curl $@ && chmod +x $@ ;\
+	else \
+	  echo "Can't fetch $(MILL_REMOTE_RELEASE)" && cat $@.curl && echo ;\
+	  false ;\
+	fi)
+
+mill.build: $(MILL_BIN)
+	cd $(CHISEL_DIR) && $(MILL) baseband.compile
+
+mill.run: $(MILL_BIN)
+	cd $(CHISEL_DIR) && $(MILL) baseband.run
+
+mill.test: $(MILL_BIN)
+	cd $(CHISEL_DIR) && $(MILL) baseband.test
+
+mill.clean:
+	rm -rf $(CHISEL_DIR)/out/
+	rm -rf .mill/

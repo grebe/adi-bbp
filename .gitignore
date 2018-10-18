@@ -1,4 +1,11 @@
+*.cache/
+*.hw/
 *.jou
 *.log
 *.ltx
+*.v
+out/
+project/
+target/
+xgui/
 xilinx-ip/

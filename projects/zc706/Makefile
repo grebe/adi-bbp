@@ -3,8 +3,8 @@
 
 M_DIR := $(shell pwd)
 
-export ADI_HDL_DIR := $(M_DIR)/../hdl
-export ADI_PHDL_DIR := $(M_DIR)/../hdl
+export ADI_HDL_DIR := $(M_DIR)/../../hdl
+export ADI_PHDL_DIR := $(M_DIR)/../../hdl
 export ADI_IGNORE_VERSION_CHECK := 1
 
 M_DEPS += $(ADI_HDL_DIR)/projects/scripts/adi_env.tcl
@@ -21,8 +21,7 @@ M_DEPS += $(ADI_HDL_DIR)/library/util_rfifo/util_rfifo.xpr
 M_DEPS += $(ADI_HDL_DIR)/library/util_wfifo/util_wfifo.xpr
 M_DEPS += $(ADI_HDL_DIR)/library/util_tdd_sync/util_tdd_sync.xpr
 M_DEPS += $(ADI_HDL_DIR)/library/axi_ad9361/axi_ad9361.xpr
-M_DEPS += ../ip/axi_ofdmbbp_tx/axi_ofdmbbp_tx.xpr
-M_DEPS += ../ip/axi_ofdmbbp_rx/axi_ofdmbbp_rx.xpr
+M_DEPS += ../../ip/baseband.xpr
 
 M_DEPS += $(ADI_HDL_DIR)/library/xilinx/common/ad_iobuf.v
 M_DEPS += $(ADI_HDL_DIR)/projects/fmcomms2/zc706/system_top.v
@@ -31,7 +30,7 @@ M_DEPS += $(ADI_HDL_DIR)/projects/fmcomms2/zc706/system_bd.tcl
 M_DEPS += $(ADI_HDL_DIR)/projects/fmcomms2/common/fmcomms2_bd.tcl
 M_DEPS += $(ADI_HDL_DIR)/projects/common/zc706/zc706_system_constr.xdc
 M_DEPS += $(ADI_HDL_DIR)/projects/common/zc706/zc706_system_bd.tcl
-M_DEPS += zc706.txrx.tcl
+M_DEPS += zc706.tcl
 
 M_VIVADO := vivado -mode batch -source
 #M_VIVADO := vivado -mode tcl -source
@@ -72,13 +71,12 @@ clean-all:clean
 	make -C $(ADI_HDL_DIR)/library/util_wfifo clean
 	make -C $(ADI_HDL_DIR)/library/util_tdd_sync clean
 	make -C $(ADI_HDL_DIR)/library/axi_ad9361 clean
-	make -C ../ip/axi_ofdmbbp_tx clean
-	make -C ../ip/axi_ofdmbbp_rx clean
+	make -C ../../ip clean
 
 
 xcomm2ip_zc706.sdk/system_top.hdf: $(M_DEPS)
 	rm -rf $(M_FLIST)
-	$(M_VIVADO) zc706.txrx.tcl
+	$(M_VIVADO) zc706.tcl
 
 #	$(M_VIVADO) zc706.tcl >> zc706_vivado.log 2>&1
 
@@ -95,8 +93,7 @@ lib:
 	make -C $(ADI_HDL_DIR)/library/util_rfifo
 	make -C $(ADI_HDL_DIR)/library/util_tdd_sync
 	make -C $(ADI_HDL_DIR)/library/axi_ad9361
-	make -C ../ip/axi_ofdmbbp_tx
-	make -C ../ip/axi_ofdmbbp_rx
+	make -C ../../ip/
 
 ####################################################################################
 ####################################################################################
