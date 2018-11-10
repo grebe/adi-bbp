@@ -4,17 +4,21 @@ import chisel3._
 import chisel3.experimental.MultiIOModule
 
 class Baseband extends MultiIOModule {
-  val adcWidth = 8
-  val dacWidth = 16
+  val adcWidth = 16
+  val dacWidth = 8
 
   // adc inputs
   val adc_valid_i0 = IO(Input(Bool()))
+  // val adc_en_i0 = IO(Input(Bool()))
   val adc_data_i0 = IO(Input(UInt(adcWidth.W)))
   val adc_valid_q0 = IO(Input(Bool()))
+  // val adc_en_q0 = IO(Input(Bool()))
   val adc_data_q0 = IO(Input(UInt(adcWidth.W)))
   val adc_valid_i1 = IO(Input(Bool()))
+  // val adc_en_i1 = IO(Input(Bool()))
   val adc_data_i1 = IO(Input(UInt(adcWidth.W)))
   val adc_valid_q1 = IO(Input(Bool()))
+  // val adc_en_q1 = IO(Input(Bool()))
   val adc_data_q1 = IO(Input(UInt(adcWidth.W)))
 
   // dac outputs
@@ -30,6 +34,8 @@ class Baseband extends MultiIOModule {
   val dac_valid_q1 = IO(Input(Bool()))
   val dma_data_q1 = IO(Input(UInt(dacWidth.W)))
   val dac_data_q1 = IO(Output(UInt(dacWidth.W)))
+
+  val dma_dovf = IO(Input(Bool()))
 
   // axi interface
   val s_axi_aclk = IO(Input(Clock()))

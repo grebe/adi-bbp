@@ -39,7 +39,7 @@ clean-all:
 
 baseband.xpr: $(M_DEPS)
 	rm -rf $(M_FLIST)
-	$(M_VIVADO) baseband_ip.tcl  >> baseband.log 2>&1
+	$(M_VIVADO) baseband_ip.tcl  |& tee baseband.log
 
 -include Makefrag.mill
 

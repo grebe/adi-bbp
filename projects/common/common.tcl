@@ -1,64 +1,64 @@
 # project
 
-proc replace_tx {replacement} {
+proc replace_tx {old new} {
   # remove original connections
-  # delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins axi_ad9361/dac_valid_i0]]]
-  # delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins axi_ad9361/dac_data_i0]]]
-  # delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins axi_ad9361/dac_valid_q0]]]
-  # delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins axi_ad9361/dac_data_q0]]]
-  # delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins axi_ad9361/dac_valid_i1]]]
-  # delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins axi_ad9361/dac_data_i1]]]
-  # delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins axi_ad9361/dac_valid_q1]]]
-  # delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins axi_ad9361/dac_data_q1]]]
-  # delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins axi_ad9361/dac_dunf]]]
+  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_valid_i0]]]
+  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_data_i0]]]
+  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_valid_q0]]]
+  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_data_q0]]]
+  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_valid_i1]]]
+  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_data_i1]]]
+  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_valid_q1]]]
+  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_data_q1]]]
+  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_dunf]]]
 
   # connect output of replacement block
-  # ad_connect  $replacement/dac_valid_i0 axi_ad9361/dac_valid_i0
-  # ad_connect  $replacement/dac_data_i0  axi_ad9361/dac_data_i0
-  # ad_connect  $replacement/dac_valid_q0 axi_ad9361/dac_valid_q0
-  # ad_connect  $replacement/dac_data_q0  axi_ad9361/dac_data_q0
-  # ad_connect  $replacement/dac_valid_i1 axi_ad9361/dac_valid_i1
-  # ad_connect  $replacement/dac_data_i1  axi_ad9361/dac_data_i1
-  # ad_connect  $replacement/dac_valid_q1 axi_ad9361/dac_valid_q1
-  # ad_connect  $replacement/dac_data_q1  axi_ad9361/dac_data_q1
-  # ad_connect  $replacement/dac_dovf     axi_ad9361/dac_dovf
-  # ad_connect  $replacement/dac_dunf     axi_ad9361/dac_dunf
+  ad_connect  $old/dac_valid_i0 $new/dac_valid_i0
+  ad_connect  $old/dac_data_i0  $new/dac_data_i0
+  ad_connect  $old/dac_valid_q0 $new/dac_valid_q0
+  ad_connect  $old/dac_data_q0  $new/dac_data_q0
+  ad_connect  $old/dac_valid_i1 $new/dac_valid_i1
+  ad_connect  $old/dac_data_i1  $new/dac_data_i1
+  ad_connect  $old/dac_valid_q1 $new/dac_valid_q1
+  ad_connect  $old/dac_data_q1  $new/dac_data_q1
+  # ad_connect  $old/dac_dovf     $new/dac_dovf
+  # ad_connect  $old/dac_dunf     $new/dac_dunf
 
-  ad_connect  util_ad9361_dac_upack/dac_data_0 $replacement/dma_data_i0
-  ad_connect  util_ad9361_dac_upack/dac_data_1 $replacement/dma_data_q0
-  ad_connect  util_ad9361_dac_upack/dac_data_2 $replacement/dma_data_i1
-  ad_connect  util_ad9361_dac_upack/dac_data_3 $replacement/dma_data_q1
-  # ad_connect  axi_ad9361_dac_dma/fifo_rd_underflow $replacement/dma_dunf
-  # ad_connect  $replacement/dma_dovf GND
+  ad_connect  util_ad9361_dac_upack/dac_data_0 $new/dma_data_i0
+  ad_connect  util_ad9361_dac_upack/dac_data_1 $new/dma_data_q0
+  ad_connect  util_ad9361_dac_upack/dac_data_2 $new/dma_data_i1
+  ad_connect  util_ad9361_dac_upack/dac_data_3 $new/dma_data_q1
+  # ad_connect  axi_ad9361_dac_dma/fifo_rd_underflow $new/dma_dunf
+  ad_connect  $new/dma_dovf GND
 }
 
-proc add_rx {replacement} {
+proc add_rx {old new} {
   # connect adc output to replacement block
-  ad_connect  axi_ad9361/adc_valid_i0 $replacement/adc_valid_i0
-  ad_connect  axi_ad9361/adc_data_i0  $replacement/adc_data_i0
-  ad_connect  axi_ad9361/adc_valid_q0 $replacement/adc_valid_q0
-  ad_connect  axi_ad9361/adc_data_q0  $replacement/adc_data_q0
-  ad_connect  axi_ad9361/adc_valid_i1 $replacement/adc_valid_i1
-  ad_connect  axi_ad9361/adc_data_i1  $replacement/adc_data_i1
-  ad_connect  axi_ad9361/adc_valid_q1 $replacement/adc_valid_q1
-  ad_connect  axi_ad9361/adc_data_q1  $replacement/adc_data_q1
+  ad_connect  $old/adc_valid_i0 $new/adc_valid_i0
+  ad_connect  $old/adc_data_i0  $new/adc_data_i0
+  ad_connect  $old/adc_valid_q0 $new/adc_valid_q0
+  ad_connect  $old/adc_data_q0  $new/adc_data_q0
+  ad_connect  $old/adc_valid_i1 $new/adc_valid_i1
+  ad_connect  $old/adc_data_i1  $new/adc_data_i1
+  ad_connect  $old/adc_valid_q1 $new/adc_valid_q1
+  ad_connect  $old/adc_data_q1  $new/adc_data_q1
 }
 
 
-proc add_clock_and_reset {replacement} {
-  ad_connect  axi_ad9361/clk $replacement/clock
-  ad_connect  axi_ad9361/rst $replacement/reset
+proc add_clock_and_reset {old new} {
+  ad_connect  $old/clk $new/clock
+  ad_connect  $old/rst $new/reset
 }
 
-proc update_rxtx {replacement} {
-    add_clock_and_reset $replacement
-    add_rx $replacement
-    replace_tx $replacement
+proc update_rxtx {old new} {
+    add_clock_and_reset $old $new
+    add_rx $old $new
+    replace_tx $old $new
 }
 
 proc make_baseband {base_address} {
-  set baseband [create_bd_cell -type ip -vlnv analog.com:user:baseband:1.0 baseband]
-  ad_cpu_interconnect $base_address baseband
+  set baseband [create_bd_cell -type ip -vlnv cs.berkeley.edu:user:baseband:1.0 baseband]
+  ad_cpu_interconnect $base_address Baseband
 }
 
 proc update_bd {} {

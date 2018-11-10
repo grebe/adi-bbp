@@ -12,7 +12,6 @@ create_project zc706 . -part xc7z045ffg900-2 -force
 
 set_property board_part xilinx.com:zc706:part0:1.2 [current_project]
 set_property ip_repo_paths [list $ad_hdl_dir/library ../../ip]  [current_fileset]
-
 update_ip_catalog
 
 create_bd_design "system"
@@ -22,7 +21,8 @@ source $ad_hdl_dir/projects/common/zc706/zc706_system_bd.tcl
 source $ad_hdl_dir/projects/fmcomms2/common/fmcomms2_bd.tcl
 
 make_baseband 0x79040000
-update_rxtx baseband
+get_bd_designs -verbose
+update_rxtx axi_ad9361 Baseband
 
 update_bd
 make_targets zc706.srcs/sources_1
@@ -32,6 +32,8 @@ adi_project_files zc706 [list \
   "$ad_hdl_dir/projects/fmcomms2/zc706/system_top.v" \
   "$ad_hdl_dir/projects/fmcomms2/zc706/system_constr.xdc"\
   "$ad_hdl_dir/projects/common/zc706/zc706_system_constr.xdc" ]
+
+adi_project_run zc706
 
 #start_gui
 
@@ -61,6 +63,7 @@ adi_project_files zc706 [list \
 
 # standard build
 
-launch_runs impl_1 -to_step write_bitstream -jobs 12
-wait_on_run impl_1
-start_gui
+# launch_runs impl_1 -to_step write_bitstream -jobs 12
+# wait_on_run impl_1
+# start_gui
+# synth_design -rtl
