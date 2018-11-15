@@ -10,6 +10,8 @@ set sys_zynq 1
 
 create_project zc706 . -part xc7z045ffg900-2 -force
 
+set_param general.maxThreads 6
+
 set_property board_part xilinx.com:zc706:part0:1.2 [current_project]
 set_property ip_repo_paths [list $ad_hdl_dir/library ../../ip]  [current_fileset]
 update_ip_catalog

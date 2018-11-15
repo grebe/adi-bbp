@@ -1,23 +1,15 @@
 # ip
 
-set ad_hdl_dir $::env(ADI_HDL_DIR)
-set ad_phdl_dir $::env(ADI_HDL_DIR)
-
-source $ad_hdl_dir/library/scripts/adi_ip.tcl
-
 # adi_ip_create
 create_project baseband . -force
 
-## Load custom message severity definitions
-source $ad_hdl_dir/projects/scripts/adi_xilinx_msg.tcl
-
-## adi_ip_files
+## add files
 set ip_constr_files ""
 set proj_fileset [get_filesets sources_1]
 add_files -norecurse -scan_for_includes -fileset $proj_fileset "Baseband.v" "baseband.xdc"
 set_property "top" "Baseband" $proj_fileset
 
-# adi_ip_properties Baseband
+# make ip
 ipx::package_project -root_dir . -vendor cs.berkeley.edu -library user -taxonomy /Berkeley
 set_property name baseband [ipx::current_core]
 set_property vendor_display_name {UC Berkeley} [ipx::current_core]

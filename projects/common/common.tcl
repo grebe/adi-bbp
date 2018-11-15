@@ -3,33 +3,53 @@
 proc replace_tx {old new} {
   # remove original connections
   delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_valid_i0]]]
+  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_enable_i0]]]
   delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_data_i0]]]
   delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_valid_q0]]]
+  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_enable_i1]]]
   delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_data_q0]]]
   delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_valid_i1]]]
+  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_enable_q0]]]
   delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_data_i1]]]
   delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_valid_q1]]]
+  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_enable_q1]]]
   delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_data_q1]]]
   delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_dunf]]]
 
   # connect output of replacement block
-  ad_connect  $old/dac_valid_i0 $new/dac_valid_i0
-  ad_connect  $old/dac_data_i0  $new/dac_data_i0
-  ad_connect  $old/dac_valid_q0 $new/dac_valid_q0
-  ad_connect  $old/dac_data_q0  $new/dac_data_q0
-  ad_connect  $old/dac_valid_i1 $new/dac_valid_i1
-  ad_connect  $old/dac_data_i1  $new/dac_data_i1
-  ad_connect  $old/dac_valid_q1 $new/dac_valid_q1
-  ad_connect  $old/dac_data_q1  $new/dac_data_q1
-  # ad_connect  $old/dac_dovf     $new/dac_dovf
-  # ad_connect  $old/dac_dunf     $new/dac_dunf
+  ad_connect  $old/dac_valid_i0  $new/dac_valid_i0
+  ad_connect  $old/dac_enable_i0 $new/dac_enable_i0
+  ad_connect  $old/dac_data_i0   $new/dac_data_i0
+  ad_connect  $old/dac_valid_q0  $new/dac_valid_q0
+  ad_connect  $old/dac_enable_i1 $new/dac_enable_i1
+  ad_connect  $old/dac_data_q0   $new/dac_data_q0
+  ad_connect  $old/dac_valid_i1  $new/dac_valid_i1
+  ad_connect  $old/dac_enable_q0 $new/dac_enable_q0
+  ad_connect  $old/dac_data_i1   $new/dac_data_i1
+  ad_connect  $old/dac_valid_q1  $new/dac_valid_q1
+  ad_connect  $old/dac_enable_q1 $new/dac_enable_q1
+  ad_connect  $old/dac_data_q1   $new/dac_data_q1
+  ad_connect  $new/dac_dunf      $old/dac_dunf
 
-  ad_connect  util_ad9361_dac_upack/dac_data_0 $new/dma_data_i0
-  ad_connect  util_ad9361_dac_upack/dac_data_1 $new/dma_data_q0
-  ad_connect  util_ad9361_dac_upack/dac_data_2 $new/dma_data_i1
-  ad_connect  util_ad9361_dac_upack/dac_data_3 $new/dma_data_q1
-  # ad_connect  axi_ad9361_dac_dma/fifo_rd_underflow $new/dma_dunf
-  ad_connect  $new/dma_dovf GND
+  ad_connect  ${old}_dac_fifo/dout_data_0      $new/dma_data_i0
+  ad_connect  ${old}_dac_fifo/dout_valid_out_0 $new/dma_valid_out_i0
+  ad_connect  ${old}_dac_fifo/dout_data_1      $new/dma_data_q0
+  ad_connect  ${old}_dac_fifo/dout_valid_out_1 $new/dma_valid_out_i1
+  ad_connect  ${old}_dac_fifo/dout_data_2      $new/dma_data_i1
+  ad_connect  ${old}_dac_fifo/dout_valid_out_2 $new/dma_valid_out_q0
+  ad_connect  ${old}_dac_fifo/dout_data_3      $new/dma_data_q1
+  ad_connect  ${old}_dac_fifo/dout_valid_out_3 $new/dma_valid_out_q1
+  ad_connect  ${old}_dac_fifo/dout_unf         $new/dma_dunf
+
+  ad_connect $new/dma_enable_i0 ${old}_dac_fifo/dout_enable_0
+  ad_connect $new/dma_enable_i1 ${old}_dac_fifo/dout_enable_1
+  ad_connect $new/dma_enable_q0 ${old}_dac_fifo/dout_enable_2
+  ad_connect $new/dma_enable_q1 ${old}_dac_fifo/dout_enable_3
+
+  ad_connect $new/dma_valid_i0  ${old}_dac_fifo/dout_valid_0
+  ad_connect $new/dma_valid_i1  ${old}_dac_fifo/dout_valid_1
+  ad_connect $new/dma_valid_q0  ${old}_dac_fifo/dout_valid_2
+  ad_connect $new/dma_valid_q1  ${old}_dac_fifo/dout_valid_3
 }
 
 proc add_rx {old new} {
