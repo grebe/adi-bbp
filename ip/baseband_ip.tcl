@@ -6,7 +6,7 @@ create_project baseband . -force
 ## add files
 set ip_constr_files ""
 set proj_fileset [get_filesets sources_1]
-add_files -norecurse -scan_for_includes -fileset $proj_fileset "Baseband.v" "baseband.xdc"
+add_files -norecurse -scan_for_includes -fileset $proj_fileset "AsyncResetReg.v" "Baseband.v" "baseband.xdc"
 set_property "top" "Baseband" $proj_fileset
 
 # make ip
@@ -48,6 +48,31 @@ set_property SCOPED_TO_REF $i_module [ipx::get_files $i_file -of_objects $i_file
 ipx::save_core
 
 ipx::infer_bus_interface {\
+  m_axi_awvalid \
+  m_axi_awaddr \
+  m_axi_awprot \
+  m_axi_awready \
+  m_axi_wvalid \
+  m_axi_wdata \
+  m_axi_wstrb \
+  m_axi_wready \
+  m_axi_bvalid \
+  m_axi_bresp \
+  m_axi_bready \
+  m_axi_arvalid \
+  m_axi_araddr \
+  m_axi_arprot \
+  m_axi_arready \
+  m_axi_rvalid \
+  m_axi_rdata \
+  m_axi_rresp \
+  m_axi_rready} \
+xilinx.com:interface:aximm_rtl:1.0 [ipx::current_core]
+
+ipx::infer_bus_interface m_axi_aclk xilinx.com:signal:clock_rtl:1.0 [ipx::current_core]
+ipx::infer_bus_interface m_axi_aresetn xilinx.com:signal:reset_rtl:1.0 [ipx::current_core]
+
+ipx::infer_bus_interface {\
   s_axi_awvalid \
   s_axi_awaddr \
   s_axi_awprot \
@@ -85,6 +110,13 @@ if {$raddr_width != $waddr_width} {
     set range [expr 1 << $raddr_width]
   }
 }
+
+ipx::add_memory_map {m_axi} [ipx::current_core]
+# set_property master_memory_map_ref {m_axi} [ipx::get_bus_interfaces m_axi -of_objects [ipx::current_core]]
+ipx::add_address_block {axi_lite} [ipx::get_memory_maps m_axi -of_objects [ipx::current_core]]
+set_property range $range [ipx::get_address_blocks axi_lite \
+  -of_objects [ipx::get_memory_maps m_axi -of_objects [ipx::current_core]]]
+ipx::associate_bus_interfaces -clock m_axi_aclk -reset m_axi_aresetn [ipx::current_core]
 
 ipx::add_memory_map {s_axi} [ipx::current_core]
 set_property slave_memory_map_ref {s_axi} [ipx::get_bus_interfaces s_axi -of_objects [ipx::current_core]]

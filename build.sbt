@@ -15,6 +15,7 @@ scalacOptions ++= Seq(
   "-Ywarn-unused:locals",
   "-Ywarn-value-discard",
 )
-libraryDependencies += "edu.berkeley.cs" %% "chisel3" % "3.1.3"
 
-// libraryDependencies += "edu.berkeley.cs" %% "rocket-dsptools" % "1.2-SNAPSHOT"
+resolvers += Resolver.sonatypeRepo("snapshots")
+
+libraryDependencies += "edu.berkeley.cs" %% "rocket-dsptools" % "1.2-020719-SNAPSHOT"

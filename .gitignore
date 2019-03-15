@@ -1,5 +1,7 @@
 *.cache/
+*.f
 *.hw/
+*.ip_user_files/
 *.jou
 *.log
 *.ltx

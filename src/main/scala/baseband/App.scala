@@ -1,8 +1,10 @@
 package baseband
 
+import freechips.rocketchip.diplomacy.LazyModule
+
 object BasebandApp extends App {
   chisel3.Driver.execute(
     args ++ Array[String](),
-    () => new Baseband
+    () => LazyModule(new Baseband).module
   )
 }
