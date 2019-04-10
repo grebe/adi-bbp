@@ -1,2 +1,5 @@
 baseband.xpr
 component.xml
+
+AsyncResetReg.v
+Baseband.v
