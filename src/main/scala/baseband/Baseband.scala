@@ -68,6 +68,10 @@ extends LazyModule()(Parameters.empty) { outer =>
       axiSlaveNode.beatBytes * 5 -> Seq(RegField.r(32, dma.streamToMemLengthRemaining)),
       axiSlaveNode.beatBytes * 6 -> Seq(RegField.w(32, m2s)),
       axiSlaveNode.beatBytes * 7 -> Seq(RegField.r(32, dma.memToStreamLengthRemaining)),
+      axiSlaveNode.beatBytes * 8 -> Seq(RegField.r(32, 0.U)),
+      axiSlaveNode.beatBytes * 9 -> Seq(RegField.r(32, 1.U)),
+      axiSlaveNode.beatBytes * 10 -> Seq(RegField.r(32, 10.U)),
+      axiSlaveNode.beatBytes * 11 -> Seq(RegField.r(32, 11.U)),
     )
   }
 }
@@ -213,7 +217,7 @@ class Baseband(
 
     val outputQueue = Module(new AsyncQueue(UInt(32.W), asyncParams))
     outputQueue.io.enq_clock := s_axi_aclk
-    outputQueue.io.enq_reset := s_axi_aresetn
+    outputQueue.io.enq_reset := !s_axi_aresetn
     outputQueue.io.enq.bits := streamOut.bits.data
     outputQueue.io.enq.valid := streamOut.valid
     streamOut.ready := outputQueue.io.enq.ready

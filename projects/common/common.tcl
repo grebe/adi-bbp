@@ -79,7 +79,28 @@ proc update_rxtx {old new} {
 proc make_baseband {base_address} {
   set baseband [create_bd_cell -type ip -vlnv cs.berkeley.edu:user:baseband:1.0 baseband]
   ad_cpu_interconnect $base_address Baseband
-  ad_mem_hp0_interconnect sys_cpu_clk Baseband/m_axi
+  ad_mem_hp1_interconnect sys_cpu_clk Baseband/m_axi
+}
+
+proc add_ila {} {
+  # set_property mark_debug true [get_nets Baseband/s_axi]
+
+  current_instance Baseband
+  set_property mark_debug true [get_nets s_axi*]
+  # return scope to top level
+  current_instance
+
+  create_debug_core ila1 ila
+  set_property C_DATA_DEPTH 32768 [get_debug_cores ila1]
+  set_property C_EN_STRG_QUAL true [get_debug_cores ila1]
+  set_property C_ADV_TRIGGER true [get_debug_cores ila1]
+  set_property ALL_PROBE_SAME_MU_CNT 4 [get_debug_cores ila1]
+
+  set ila_nets [get_nets -hier -filter {MARK_DEBUG==1}]
+  set num_ila_nets [llength [get_nets [list $ila_nets]]]
+
+
+  write_debug_probes -force ./results/ila1.ltx
 }
 
 proc update_bd {} {
@@ -87,9 +108,38 @@ proc update_bd {} {
   save_bd_design
   validate_bd_design
 }
-
+ 
 proc make_targets {sources} {
   generate_target {synthesis implementation} [get_files $sources/bd/system/system.bd]
   make_wrapper -files [get_files $sources/bd/system/system.bd] -top
   import_files -force -norecurse -fileset sources_1 $sources/bd/system/hdl/system_wrapper.v
 }
+
+proc project_run_synth {project_name} {
+  launch_runs synth_1
+  wait_on_run synth_1
+  open_run synth_1
+  report_timing_summary -file timing_synth.log
+
+  set_property BITSTREAM.GENERAL.COMPRESS TRUE [current_design]
+}
+
+proc project_run_impl {project_name} {
+  launch_runs impl_1 -to_step write_bitstream
+  wait_on_run impl_1
+  open_run impl_1
+  report_timing_summary -file timing_impl.log
+
+  file mkdir $project_name.sdk
+
+  if [expr [get_property SLACK [get_timing_paths]] < 0] {
+    file copy -force $project_name.runs/impl_1/system_top.sysdef $project_name.sdk/system_top_bad_timing.hdf
+  } else {
+    file copy -force $project_name.runs/impl_1/system_top.sysdef $project_name.sdk/system_top.hdf
+  }
+
+  if [expr [get_property SLACK [get_timing_paths]] < 0] {
+    return -code error [format "ERROR: Timing Constraints NOT met!"]
+  }
+}
+

@@ -1,12 +1,16 @@
+*.bif
 *.cache/
+*.elf
 *.f
 *.hw/
 *.ip_user_files/
 *.jou
 *.log
 *.ltx
+*.sdk/
 out/
 project/
 target/
 xgui/
 xilinx-ip/
+.Xil/

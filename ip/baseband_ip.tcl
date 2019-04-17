@@ -72,6 +72,15 @@ xilinx.com:interface:aximm_rtl:1.0 [ipx::current_core]
 ipx::infer_bus_interface m_axi_aclk xilinx.com:signal:clock_rtl:1.0 [ipx::current_core]
 ipx::infer_bus_interface m_axi_aresetn xilinx.com:signal:reset_rtl:1.0 [ipx::current_core]
 
+ipx::add_bus_parameter ASSOCIATED_BUSIF [ipx::get_bus_interfaces m_axi_aclk \
+  -of_objects [ipx::current_core]]
+
+set_property value m_axi [ipx::get_bus_parameters ASSOCIATED_BUSIF \
+  -of_objects [ipx::get_bus_interfaces m_axi_aclk \
+  -of_objects [ipx::current_core]]]
+
+ipx::save_core [ipx::current_core]
+
 ipx::infer_bus_interface {\
   s_axi_awvalid \
   s_axi_awaddr \

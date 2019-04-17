@@ -1,3 +1,9 @@
 [submodule "hdl"]
 	path = hdl
 	url = https://github.com/analogdevicesinc/hdl.git
+[submodule "boot/u-boot-xlnx"]
+	path = boot/u-boot-xlnx
+	url = https://github.com/Xilinx/u-boot-xlnx.git
+[submodule "boot/linux"]
+	path = boot/linux
+	url = https://github.com/analogdevicesinc/linux.git

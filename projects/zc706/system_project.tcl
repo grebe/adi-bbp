@@ -37,7 +37,12 @@ update_rxtx axi_ad9361 Baseband
 update_bd
 make_targets zc706.srcs/sources_1
 
-adi_project_run zc706
+project_run_synth zc706
+
+add_ila
+
+project_run_impl zc706
+
 source $ad_hdl_dir/library/axi_ad9361/axi_ad9361_delay.tcl
 
 
