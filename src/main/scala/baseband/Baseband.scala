@@ -1,80 +1,12 @@
 package baseband
 
 import chisel3._
-import chisel3.util.Queue
-
 import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.amba.axi4stream._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.regmapper._
+import freechips.rocketchip.subsystem.CrossingWrapper
 import freechips.rocketchip.util._
-
-class StreamingAXI4DMAwithCSR(csrAddress: AddressSet, beatBytes: Int = 4)
-extends LazyModule()(Parameters.empty) { outer =>
-
-  val dma = LazyModule(new StreamingAXI4DMA)
-
-  val axiMasterNode = dma.axiNode
-  val axiSlaveNode = AXI4RegisterNode(address = csrAddress, beatBytes = beatBytes)
-
-  val streamNode = dma.streamNode
-
-  lazy val module = new LazyModuleImp(this) {
-    val dma = outer.dma.module
-
-    val enReg = RegInit(false.B)
-    val watchdogReg = RegInit(0.U(32.W))
-    val intReg = RegInit(0.U(6.W))
-
-    dma.enable := enReg
-
-    when (dma.readComplete) {
-      intReg := intReg | 1.U
-    }
-    when (dma.readWatchdog) {
-      intReg := intReg | 2.U
-    }
-    when (dma.readError) {
-      intReg := intReg | 4.U
-    }
-    when (dma.writeComplete) {
-      intReg := intReg | 8.U
-    }
-    when (dma.writeWatchdog) {
-      intReg := intReg | 16.U
-    }
-    when (dma.writeError) {
-      intReg := intReg | 32.U
-    }
-
-    val s2m = Wire(util.Decoupled(UInt()))
-    val m2s = Wire(util.Decoupled(UInt()))
-
-    dma.streamToMemRequest.valid := s2m.valid
-    dma.streamToMemRequest.bits := s2m.bits.asTypeOf(dma.streamToMemRequest.bits)
-    s2m.ready := dma.streamToMemRequest.ready
-
-    dma.memToStreamRequest.valid := m2s.valid
-    dma.memToStreamRequest.bits := m2s.bits.asTypeOf(dma.memToStreamRequest.bits)
-    m2s.ready := dma.memToStreamRequest.ready
-
-    axiSlaveNode.regmap(
-      axiSlaveNode.beatBytes * 0 -> Seq(RegField(1, enReg)),
-      axiSlaveNode.beatBytes * 1 -> Seq(RegField.r(1, dma.idle)),
-      axiSlaveNode.beatBytes * 2 -> Seq(RegField(32, watchdogReg)),
-      axiSlaveNode.beatBytes * 3 -> Seq(RegField(6, intReg)),
-      axiSlaveNode.beatBytes * 4 -> Seq(RegField.w(32, s2m)),
-      axiSlaveNode.beatBytes * 5 -> Seq(RegField.r(32, dma.streamToMemLengthRemaining)),
-      axiSlaveNode.beatBytes * 6 -> Seq(RegField.w(32, m2s)),
-      axiSlaveNode.beatBytes * 7 -> Seq(RegField.r(32, dma.memToStreamLengthRemaining)),
-      axiSlaveNode.beatBytes * 8 -> Seq(RegField.r(32, 0.U)),
-      axiSlaveNode.beatBytes * 9 -> Seq(RegField.r(32, 1.U)),
-      axiSlaveNode.beatBytes * 10 -> Seq(RegField.r(32, 10.U)),
-      axiSlaveNode.beatBytes * 11 -> Seq(RegField.r(32, 11.U)),
-    )
-  }
-}
 
 class Baseband(
   val adcWidth: Int = 16,
@@ -82,22 +14,32 @@ class Baseband(
   val csrAddress: AddressSet = AddressSet(0x0, 0xFFFF),
   val mstAddress: Seq[AddressSet] = Seq(AddressSet(0x0, 0xFFFF)),
 ) extends LazyModule()(Parameters.empty) {
-  val dma = LazyModule(new StreamingAXI4DMAwithCSR(csrAddress = csrAddress))
+  val sAxiIsland = LazyModule(new CrossingWrapper(AsynchronousCrossing()))
 
-  val axiMasterNode = AXI4MasterNode(Seq(AXI4MasterPortParameters(Seq(AXI4MasterParameters(
+  val dma = sAxiIsland { LazyModule(new StreamingAXI4DMAWithCSR(csrAddress = csrAddress)) }
+
+  val axiMasterNode = sAxiIsland { AXI4MasterNode(Seq(AXI4MasterPortParameters(Seq(AXI4MasterParameters(
     "baseband"
-  )))))
-  val axiSlaveNode = AXI4SlaveNode(Seq(AXI4SlavePortParameters(Seq(AXI4SlaveParameters(
+  ))))) }
+  val axiSlaveNode = sAxiIsland { AXI4SlaveNode(Seq(AXI4SlavePortParameters(Seq(AXI4SlaveParameters(
     address = mstAddress,
     supportsWrite = TransferSizes(4, 512),
     supportsRead = TransferSizes(4, 512),
-  )), beatBytes = 4)))
+  )), beatBytes = 4))) }
+
   val streamNodeMaster = AXI4StreamMasterNode(AXI4StreamMasterParameters(n = 4))
   val streamNodeSlave = AXI4StreamSlaveNode(AXI4StreamSlaveParameters())
 
-  dma.axiSlaveNode := axiMasterNode
+  val aligner = sAxiIsland { StreamAligner(addressSet = AddressSet(0x10000, 0xFFFF)) }
+  val xbar = sAxiIsland { AXI4Xbar() }
+
+  // dma.axiSlaveNode := axiMasterNode
   axiSlaveNode := dma.axiMasterNode
-  streamNodeSlave := dma.streamNode := streamNodeMaster
+  streamNodeSlave := dma.streamNode := aligner._1 := streamNodeMaster
+
+  aligner._2 := xbar
+  dma.axiSlaveNode := xbar
+  xbar := axiMasterNode
 
   lazy val module = new LazyModuleImp(this) {
     val axiSlave = axiMasterNode.out.head._1
@@ -200,34 +142,37 @@ class Baseband(
     val s_axi_rresp = IO(Output(UInt(2.W)))
     val s_axi_rready = IO(Input(Bool()))
 
-    dma.module.clock := s_axi_aclk
-    dma.module.reset := !s_axi_aresetn
+    sAxiIsland.module.clock := s_axi_aclk
+    sAxiIsland.module.reset := !s_axi_aresetn
 
-    val asyncParams = AsyncQueueParams.singleton()
-    val inputQueue = Module(new AsyncQueue(UInt(32.W), asyncParams))
-    inputQueue.io.enq_clock := clock
-    inputQueue.io.enq_reset := reset
-    inputQueue.io.enq.valid := adc_valid_i0 && adc_valid_q0
-    inputQueue.io.enq.bits := util.Cat(adc_data_i0, adc_data_q0)
-    inputQueue.io.deq_clock := s_axi_aclk
-    inputQueue.io.deq_reset := !s_axi_aresetn
-    inputQueue.io.deq.ready := streamIn.ready
-    streamIn.valid := inputQueue.io.deq.valid
-    streamIn.bits.data := inputQueue.io.deq.bits
+    // dma.module.clock := s_axi_aclk
+    // dma.module.reset := !s_axi_aresetn
 
-    val outputQueue = Module(new AsyncQueue(UInt(32.W), asyncParams))
-    outputQueue.io.enq_clock := s_axi_aclk
-    outputQueue.io.enq_reset := !s_axi_aresetn
-    outputQueue.io.enq.bits := streamOut.bits.data
-    outputQueue.io.enq.valid := streamOut.valid
-    streamOut.ready := outputQueue.io.enq.ready
-    outputQueue.io.deq_clock := clock
-    outputQueue.io.deq_reset := reset
-    outputQueue.io.deq.ready := dac_enable_i0 && dac_enable_q0
-    // dac_valid_i0 := streamOut.valid && dac_valid_q0
-    // dac_valid_q0 := streamOut.valid && dac_valid_i0
-    dac_data_i0 := outputQueue.io.deq.bits(15, 0)
-    dac_data_q0 := outputQueue.io.deq.bits(31, 16)
+    // val asyncParams = AsyncQueueParams.singleton()
+    // val inputQueue = Module(new AsyncQueue(UInt(32.W), asyncParams))
+    // inputQueue.io.enq_clock := clock
+    // inputQueue.io.enq_reset := reset
+    // inputQueue.io.enq.valid := adc_valid_i0 && adc_valid_q0
+    // inputQueue.io.enq.bits := util.Cat(adc_data_i0, adc_data_q0)
+    // inputQueue.io.deq_clock := s_axi_aclk
+    // inputQueue.io.deq_reset := !s_axi_aresetn
+    // inputQueue.io.deq.ready := streamIn.ready
+    // streamIn.valid := inputQueue.io.deq.valid
+    // streamIn.bits.data := inputQueue.io.deq.bits
+
+    // val outputQueue = Module(new AsyncQueue(UInt(32.W), asyncParams))
+    // outputQueue.io.enq_clock := s_axi_aclk
+    // outputQueue.io.enq_reset := !s_axi_aresetn
+    // outputQueue.io.enq.bits := streamOut.bits.data
+    // outputQueue.io.enq.valid := streamOut.valid
+    // streamOut.ready := outputQueue.io.enq.ready
+    // outputQueue.io.deq_clock := clock
+    // outputQueue.io.deq_reset := reset
+    // outputQueue.io.deq.ready := dac_enable_i0 && dac_enable_q0
+    // // dac_valid_i0 := streamOut.valid && dac_valid_q0
+    // // dac_valid_q0 := streamOut.valid && dac_valid_i0
+    // dac_data_i0 := outputQueue.io.deq.bits(15, 0)
+    // dac_data_q0 := outputQueue.io.deq.bits(31, 16)
 
     // dac_valid_i1 := false.B
     // dac_valid_q1 := false.B

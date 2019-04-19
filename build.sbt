@@ -18,4 +18,4 @@ scalacOptions ++= Seq(
 
 resolvers += Resolver.sonatypeRepo("snapshots")
 
-libraryDependencies += "edu.berkeley.cs" %% "rocket-dsptools" % "1.2-020719-SNAPSHOT"
+libraryDependencies += "edu.berkeley.cs" %% "rocket-dsptools" % "1.2-SNAPSHOT"
