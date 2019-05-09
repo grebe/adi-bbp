@@ -1,7 +1,7 @@
 package baseband
 
 import chisel3._
-import chisel3.util.{Counter, log2Ceil}
+import chisel3.util.log2Ceil
 import freechips.rocketchip.amba.axi4.AXI4RegisterNode
 import freechips.rocketchip.amba.axi4stream.AXI4StreamIdentityNode
 import freechips.rocketchip.config.Parameters
@@ -16,11 +16,13 @@ import freechips.rocketchip.regmapper.RegField
   * upon which point it passes transactions to the output. From then on, the input passes to the output until enable is
   * changed to false.
   */
-class StreamAligner(
-                     maxCount: BigInt = 1L << 32,
-                     addressSet: AddressSet = AddressSet(0x0, 0xFFFF),
-                     beatBytes: Int = 4)
-  extends LazyModule()(Parameters.empty) {
+class StreamAligner
+(
+  maxCount: BigInt = 1L << 32,
+  addressSet: AddressSet = AddressSet(0x0, 0xFFFF),
+  beatBytes: Int = 4
+) extends LazyModule()(Parameters.empty) {
+
   val streamNode = AXI4StreamIdentityNode()
 
   val axiNode = AXI4RegisterNode(address = addressSet, beatBytes = beatBytes)
