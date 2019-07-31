@@ -12,6 +12,7 @@
 out/
 project/
 target/
+vivado_pid*
 xgui/
 xilinx-ip/
 .Xil/
