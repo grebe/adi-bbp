@@ -1,3 +1,4 @@
+*.dtb
 *.log
 vivado.jou
 *.cache
@@ -5,3 +6,7 @@ vivado.jou
 *.runs
 *.srcs
 *.xpr
+
+build_boot_bin/
+FSBL/
+output_boot_bin/
