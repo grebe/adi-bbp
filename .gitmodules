@@ -7,3 +7,6 @@
 [submodule "boot/linux"]
 	path = boot/linux
 	url = https://github.com/analogdevicesinc/linux.git
+[submodule "no-OS"]
+	path = no-OS
+	url = git@github.com:analogdevicesinc/no-OS.git

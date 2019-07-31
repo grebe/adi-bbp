@@ -83,24 +83,56 @@ proc make_baseband {base_address} {
 }
 
 proc add_ila {} {
-  # set_property mark_debug true [get_nets Baseband/s_axi]
+  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/s_axi_aw.*]
+  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/s_axi_ar.*]
+  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/s_axi_r.*]
+  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/s_axi_w.*]
+  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/s_axi_b.*]
 
-  current_instance Baseband
-  set_property mark_debug true [get_nets s_axi*]
-  # return scope to top level
-  current_instance
+  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/m_axi_aw.*]
+  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/m_axi_ar.*]
+  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/m_axi_r.*]
+  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/m_axi_w.*]
+  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/m_axi_b.*]
+
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_aw.*]
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_ar.*]
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_r.*]
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_w.*]
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_b.*]
+
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_aw.*]
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_ar.*]
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_r.*]
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_w.*]
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_b.*]
 
   create_debug_core ila1 ila
-  set_property C_DATA_DEPTH 32768 [get_debug_cores ila1]
+  set_property C_DATA_DEPTH 2048 [get_debug_cores ila1]
   set_property C_EN_STRG_QUAL true [get_debug_cores ila1]
   set_property C_ADV_TRIGGER true [get_debug_cores ila1]
   set_property ALL_PROBE_SAME_MU_CNT 4 [get_debug_cores ila1]
+  set_property C_INPUT_PIPE_STAGES 5 [get_debug_cores ila1]
 
   set ila_nets [get_nets -hier -filter {MARK_DEBUG==1}]
   set num_ila_nets [llength [get_nets [list $ila_nets]]]
 
+  set_property port_width 1 [get_debug_ports ila1/clk]
+  connect_debug_port ila1/clk [get_nets -hier -regexp .*/baseband/s_axi_aclk]
 
-  write_debug_probes -force ./results/ila1.ltx
+  set_property port_width $num_ila_nets [get_debug_ports ila1/probe0]
+  connect_debug_port ila1/probe0 $ila_nets
+
+  save_constraints
+  implement_debug_core
+
+  # write_debug_probes -force ./results/ila1.ltx
+}
+
+proc place_ila {} {
+  create_pblock pblock_ilamem
+  add_cells_to_pblock pblock_ilamem [get_cells -regexp ila1/.* -hier -filter {PRIMITIVE_SUBGROUP == bram}] -clear_locs
+  place_pblocks -effort HIGH -utilization 75 [get_pblocks [list pblock_ilamem]]
 }
 
 proc update_bd {} {
@@ -108,7 +140,7 @@ proc update_bd {} {
   save_bd_design
   validate_bd_design
 }
- 
+
 proc make_targets {sources} {
   generate_target {synthesis implementation} [get_files $sources/bd/system/system.bd]
   make_wrapper -files [get_files $sources/bd/system/system.bd] -top
@@ -120,6 +152,7 @@ proc project_run_synth {project_name} {
   wait_on_run synth_1
   open_run synth_1
   report_timing_summary -file timing_synth.log
+  report_bus_skew -file skew_synth.log
 
   set_property BITSTREAM.GENERAL.COMPRESS TRUE [current_design]
 }
@@ -129,6 +162,7 @@ proc project_run_impl {project_name} {
   wait_on_run impl_1
   open_run impl_1
   report_timing_summary -file timing_impl.log
+  report_bus_skew -file skew_impl.log
 
   file mkdir $project_name.sdk
 

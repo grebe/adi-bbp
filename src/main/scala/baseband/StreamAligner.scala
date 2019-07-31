@@ -32,10 +32,11 @@ class StreamAligner
     val aligned = RegInit(false.B)
     val maxCountReg = RegInit(0.U(log2Ceil(maxCount).W))
     val cnt = RegInit(0.U(log2Ceil(maxCount).W))
+    val cntPassthrough = RegInit(false.B)
 
     val enPrev = RegNext(en, false.B)
 
-    when (streamNode.in.head._1.fire()) {
+    when (streamNode.in.head._1.fire() || cntPassthrough) {
       when(cnt === maxCountReg - 1.U) {
         cnt := 0.U
       }.otherwise {
@@ -44,15 +45,23 @@ class StreamAligner
     }
 
     (streamNode.in zip streamNode.out) foreach { case ((in, pIn), (out, pOut)) =>
-        out.bits := in.bits
+      out.bits := in.bits
+      when (cntPassthrough) {
+        out.bits.data := cnt
+      }
     }
 
     when (en && (cnt === 0.U || aligned)) {
         aligned := true.B
 
         (streamNode.in zip streamNode.out) foreach { case ((in, _), (out, _)) =>
+          when (cntPassthrough) {
+            out.valid := true.B
+            in.ready := false.B
+          } .otherwise {
             out.valid := in.valid
             in.ready := out.ready
+          }
         }
     } .otherwise {
       aligned := false.B
@@ -65,7 +74,9 @@ class StreamAligner
     axiNode.regmap(
       0 * beatBytes -> Seq(RegField(1, en)),
       1 * beatBytes -> Seq(RegField.r(1, aligned)),
-      2 * beatBytes -> Seq(RegField.r(log2Ceil(maxCount), cnt))
+      2 * beatBytes -> Seq(RegField.r(log2Ceil(maxCount), cnt)),
+      3 * beatBytes -> Seq(RegField(log2Ceil(maxCount), maxCountReg)),
+      4 * beatBytes -> Seq(RegField(1, cntPassthrough)),
     )
   }
 }

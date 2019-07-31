@@ -3,3 +3,8 @@ component.xml
 
 AsyncResetReg.v
 Baseband.v
+baseband.xdc
+
+baseband.srcs/
+baseband.sim/
+*.wcfg

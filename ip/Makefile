@@ -41,10 +41,15 @@ baseband.xpr: $(M_DEPS)
 	rm -rf $(M_FLIST)
 	$(M_VIVADO) baseband_ip.tcl  |& tee baseband.log
 
+sim: baseband.xpr
+	$(M_VIVADO) baseband_test.tcl |& tee baseband_test.log
+
+.PHONY: sim
+
 -include Makefrag.mill
 
 Baseband.v: $(CHISEL_SRCS)
 	cd $(CHISEL_DIR) && sbt "run -td $(M_DIR)"
 
 Baseband.fir: $(CHISEL_SRCS)
-	cd $(CHISEL_DIR) && sbt "run -td $(M_DIR) -X low"
+	cd $(CHISEL_DIR) && sbt "run -td $(M_DIR) -X low" 

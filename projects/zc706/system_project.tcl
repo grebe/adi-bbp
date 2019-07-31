@@ -39,7 +39,8 @@ make_targets zc706.srcs/sources_1
 
 project_run_synth zc706
 
-# add_ila
+add_ila
+place_ila
 
 project_run_impl zc706
 
