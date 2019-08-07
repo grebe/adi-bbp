@@ -10,12 +10,13 @@ import freechips.rocketchip.subsystem.CrossingWrapper
 class Baseband(
   val adcWidth: Int = 16,
   val dacWidth: Int = 16,
-  val csrAddress: AddressSet = AddressSet(0x794000000L, 0xFF),
-  val mstAddress: Seq[AddressSet] = Seq(AddressSet(0x0, BigInt("FF" * 8, 16))),
+  val csrAddress: AddressSet = AddressSet(0, 0xFF),
+  val mstAddress: Seq[AddressSet] = Seq(AddressSet(0x0, BigInt("FF" * 4, 16))),
 ) extends LazyModule()(Parameters.empty) {
+  val beatBytes = 4
   val sAxiIsland = LazyModule(new CrossingWrapper(AsynchronousCrossing(safe=false)) with HasAXI4StreamCrossing)
 
-  val dma = sAxiIsland { LazyModule(new StreamingAXI4DMAWithCSR(csrAddress = csrAddress, beatBytes = 8)) }
+  val dma = sAxiIsland { LazyModule(new StreamingAXI4DMAWithCSR(csrAddress = csrAddress, beatBytes = beatBytes)) }
 
   val axiMasterNode = AXI4MasterNode(Seq(AXI4MasterPortParameters(Seq(AXI4MasterParameters(
     "baseband",
@@ -24,7 +25,7 @@ class Baseband(
     address = mstAddress,
     supportsWrite = TransferSizes(4, 512),
     supportsRead = TransferSizes(4, 512),
-  )), beatBytes = 8)))
+  )), beatBytes = beatBytes)))
 
   // val axiMasterIslandNode = AXI4IdentityNode()
   // val axiSlaveIslandNode = AXI4IdentityNode()
@@ -35,18 +36,19 @@ class Baseband(
   val streamNodeMaster = AXI4StreamMasterNode(AXI4StreamMasterParameters(n = 4, u=1, numMasters = 1))
   val streamNodeSlave = AXI4StreamSlaveNode(AXI4StreamSlaveParameters(numEndpoints = 1, hasStrb = true))
 
-  val (alignerStream, alignerAXI) = StreamAligner(addressSet = AddressSet(0x79400100, 0xFF), beatBytes = 8)
+  val (alignerStream, alignerAXI) = StreamAligner(addressSet = AddressSet(0x100, 0xFF), beatBytes = beatBytes)
   val xbar = sAxiIsland { AXI4Xbar() }
 
   sAxiIsland.crossAXI4StreamIn(dma.streamNode) :=
-    AXI4StreamWidthAdapter.nToOne(2) :=
+    // AXI4StreamWidthAdapter.nToOne(2) :=
     AXI4StreamBuffer() :=
     alignerStream :=
+    AXI4StreamBuffer() :=
     streamNodeMaster
 
   streamNodeSlave :=
     AXI4StreamBuffer() :=
-    AXI4StreamWidthAdapter.oneToN(2) :=
+    // AXI4StreamWidthAdapter.oneToN(2) :=
     sAxiIsland.crossAXI4StreamOut(dma.streamNode)
 
   alignerAXI := sAxiIsland.crossAXI4Out(xbar)
@@ -117,7 +119,7 @@ class Baseband(
     val m_axi_aresetn = IO(Output(Bool()))
     val m_axi_awvalid = IO(Output(Bool()))
     val m_axi_awid = IO(Output(Bool()))
-    val m_axi_awaddr = IO(Output(UInt(64.W)))
+    val m_axi_awaddr = IO(Output(UInt((beatBytes * 8).W)))
     val m_axi_awlen = IO(Output(UInt(8.W)))
     val m_axi_awsize = IO(Output(UInt(4.W)))
     val m_axi_awburst = IO(Output(UInt(3.W)))
@@ -126,8 +128,8 @@ class Baseband(
     val m_axi_awprot = IO(Output(UInt(3.W)))
     val m_axi_awready = IO(Input(Bool()))
     val m_axi_wvalid = IO(Output(Bool()))
-    val m_axi_wdata = IO(Output(UInt(64.W)))
-    val m_axi_wstrb = IO(Output(UInt(4.W)))
+    val m_axi_wdata = IO(Output(UInt((beatBytes * 8).W)))
+    val m_axi_wstrb = IO(Output(UInt(beatBytes.W)))
     val m_axi_wlast = IO(Output(Bool()))
     val m_axi_wready = IO(Input(Bool()))
     val m_axi_bvalid = IO(Input(Bool()))
@@ -136,7 +138,7 @@ class Baseband(
     val m_axi_bready = IO(Output(Bool()))
     val m_axi_arvalid = IO(Output(Bool()))
     val m_axi_arid = IO(Output(Bool()))
-    val m_axi_araddr = IO(Output(UInt(64.W)))
+    val m_axi_araddr = IO(Output(UInt((beatBytes * 8).W)))
     val m_axi_arlen = IO(Output(UInt(8.W)))
     val m_axi_arsize = IO(Output(UInt(4.W)))
     val m_axi_arburst = IO(Output(UInt(3.W)))
@@ -146,7 +148,7 @@ class Baseband(
     val m_axi_arready = IO(Input(Bool()))
     val m_axi_rvalid = IO(Input(Bool()))
     val m_axi_rid = IO(Input(Bool()))
-    val m_axi_rdata = IO(Input(UInt(64.W)))
+    val m_axi_rdata = IO(Input(UInt((beatBytes * 8).W)))
     val m_axi_rresp = IO(Input(UInt(2.W)))
     val m_axi_rready = IO(Output(Bool()))
 
@@ -154,22 +156,22 @@ class Baseband(
     val s_axi_aclk = IO(Input(Clock()))
     val s_axi_aresetn = IO(Input(Bool()))
     val s_axi_awvalid = IO(Input(Bool()))
-    val s_axi_awaddr = IO(Input(UInt(64.W)))
+    val s_axi_awaddr = IO(Input(UInt((beatBytes * 8).W)))
     val s_axi_awprot = IO(Input(UInt(3.W)))
     val s_axi_awready = IO(Output(Bool()))
     val s_axi_wvalid = IO(Input(Bool()))
-    val s_axi_wdata = IO(Input(UInt(64.W)))
-    val s_axi_wstrb = IO(Input(UInt(8.W)))
+    val s_axi_wdata = IO(Input(UInt((beatBytes * 8).W)))
+    val s_axi_wstrb = IO(Input(UInt(beatBytes.W)))
     val s_axi_wready = IO(Output(Bool()))
     val s_axi_bvalid = IO(Output(Bool()))
     val s_axi_bresp = IO(Output(UInt(2.W)))
     val s_axi_bready = IO(Input(Bool()))
     val s_axi_arvalid = IO(Input(Bool()))
-    val s_axi_araddr = IO(Input(UInt(64.W)))
+    val s_axi_araddr = IO(Input(UInt((beatBytes * 8).W)))
     val s_axi_arprot = IO(Input(UInt(3.W)))
     val s_axi_arready = IO(Output(Bool()))
     val s_axi_rvalid = IO(Output(Bool()))
-    val s_axi_rdata = IO(Output(UInt(64.W)))
+    val s_axi_rdata = IO(Output(UInt((beatBytes * 8).W)))
     val s_axi_rresp = IO(Output(UInt(2.W)))
     val s_axi_rready = IO(Input(Bool()))
 
@@ -202,6 +204,8 @@ class Baseband(
 
     dac_dunf := dma_dunf
 
+    m_axi_aresetn := s_axi_aresetn
+
     m_axi_awvalid := axiMaster.aw.valid
     m_axi_awid := axiMaster.aw.bits.id
     m_axi_awaddr := axiMaster.aw.bits.addr
@@ -215,7 +219,7 @@ class Baseband(
 
     m_axi_wvalid := axiMaster.w.valid
     m_axi_wdata := axiMaster.w.bits.data
-    m_axi_wstrb := axiMaster.w.bits.strb
+    m_axi_wstrb := 0xFFFFFFFFL.U // axiMaster.w.bits.strb
     m_axi_wlast := axiMaster.w.bits.last
     axiMaster.w.ready := m_axi_wready
 

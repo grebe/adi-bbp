@@ -13,7 +13,7 @@
 
 #define BASEBAND_DEBUG 1
 
-#define ADDRESS_SHIFT 3 // 64-bit words
+#define ADDRESS_SHIFT 2 // 32-bit words
 
 #define STREAM_ALIGNER_BASE           0x100
 #define STREAM_ALIGNER_EN             (STREAM_ALIGNER_BASE + (0x0 << ADDRESS_SHIFT))
@@ -114,7 +114,7 @@ struct vm_operations_struct baseband_mmap_vm_ops = {
 static int baseband_mmap(struct file *file, struct vm_area_struct *vma)
 {
   unsigned long len = vma->vm_end - vma->vm_start;
-  unsigned char *kbuf;
+  void *kbuf;
   static dma_addr_t dma_handle;
   unsigned long wait_cnt;
 
@@ -139,25 +139,32 @@ static int baseband_mmap(struct file *file, struct vm_area_struct *vma)
 
   // do the dma
   iowrite32(1, baseband_registers + DMA_EN);
-  iowrite32(dma_handle, baseband_registers + DMA_S2M_BASE);
-  // iowrite32((u32)kbuf, baseband_registers + DMA_S2M_BASE);
-  // iowrite64(kbuf, baseband_registers + DMA_S2M_BASE);
+  iowrite32((u32)kbuf, baseband_registers + DMA_S2M_BASE);
   iowrite32((len >> 2) - 1, baseband_registers + DMA_S2M_LENGTH);
-  iowrite32(0, baseband_registers + DMA_S2M_CYCLES);
-  iowrite32(0, baseband_registers + DMA_S2M_FIXED);
+  // iowrite32(0, baseband_registers + DMA_S2M_CYCLES);
+  // iowrite32(0, baseband_registers + DMA_S2M_FIXED);
+  mb();
   iowrite32(0, baseband_registers + DMA_S2M_WGO_RREMAINING);
+  mb();
+  pr_err("IDLE=%d\n", ioread32(baseband_registers + DMA_IDLE));
 
 #ifdef BASEBAND_DEBUG
   printk(KERN_INFO "initiated dma, now waiting\n");
 #endif /* BASEBAND_DEBUG */
 
   wait_cnt = 0;
-  while (ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING) != 0 && wait_cnt < 1000) {
+  while (ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING) != 0 && wait_cnt < 1000000) {
     wait_cnt++;
   }
-
+  if (wait_cnt == 1000000) {
+    pr_err("timeout on dma (remaining)");
+  }
+  wait_cnt = 0;
+  while (ioread32(baseband_registers + DMA_IDLE) == 0 && wait_cnt < 1000) {
+    wait_cnt++;
+  }
   if (wait_cnt == 1000) {
-    pr_err("timeout on dma");
+    pr_err("timeout on dma (idle)");
   }
 
 #ifdef BASEBAND_DEBUG

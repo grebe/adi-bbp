@@ -79,33 +79,23 @@ proc update_rxtx {old new} {
 proc make_baseband {base_address} {
   set baseband [create_bd_cell -type ip -vlnv cs.berkeley.edu:user:baseband:1.0 baseband]
   ad_cpu_interconnect $base_address Baseband
-  ad_mem_hp1_interconnect sys_cpu_clk Baseband/m_axi
+  # ad_mem_hp3_interconnect sys_cpu_clk sys_ps7/S_AXI_HP3
+  ad_mem_hp0_interconnect sys_cpu_clk Baseband/m_axi
 }
 
 proc add_ila {} {
-  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/s_axi_aw.*]
-  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/s_axi_ar.*]
-  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/s_axi_r.*]
-  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/s_axi_w.*]
-  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/s_axi_b.*]
 
-  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/m_axi_aw.*]
-  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/m_axi_ar.*]
-  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/m_axi_r.*]
-  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/m_axi_w.*]
-  set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/m_axi_b.*]
+  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_aw.*]
+  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_ar.*]
+  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_r.*]
+  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_w.*]
+  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_b.*]
 
-  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_aw.*]
-  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_ar.*]
-  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_r.*]
-  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_w.*]
-  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_b.*]
-
-  set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_aw.*]
-  set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_ar.*]
-  set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_r.*]
-  set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_w.*]
-  set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_b.*]
+  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_aw.*]
+  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_ar.*]
+  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_r.*]
+  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_w.*]
+  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_b.*]
 
   create_debug_core ila1 ila
   set_property C_DATA_DEPTH 2048 [get_debug_cores ila1]
