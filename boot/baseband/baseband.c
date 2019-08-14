@@ -1,4 +1,5 @@
 #include <linux/cdev.h>
+#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/fs.h>
@@ -10,6 +11,7 @@
 #include <linux/of_address.h>
 #include <linux/of_device.h>
 #include <linux/slab.h>
+#include <linux/uaccess.h>
 
 #define BASEBAND_DEBUG 1
 
@@ -68,8 +70,7 @@ static struct cdev c_dev;
 static struct class* cl;
 static dev_t dev;
 
-static struct device baseband_dev = {
-};
+static struct device baseband_dev;
 
 static int baseband_open(struct inode *inode, struct file *file)
 {
@@ -78,8 +79,70 @@ static int baseband_open(struct inode *inode, struct file *file)
 
 static int baseband_read(struct file *file, char __user *user_buffer, size_t size, loff_t *offset)
 {
+  void *kbuf;
+  static dma_addr_t dma_handle;
+  unsigned long wait_cnt;
+  int i;
 
-  return -EINVAL;
+  // if (dma_set_coherent_mask(&baseband_dev, 0x3FFFFFFFL)) {
+  //   pr_err("Could not set mask");
+  //   return -EINVAL;
+  // }
+
+  kbuf = dma_alloc_coherent(&baseband_dev, size, &dma_handle, GFP_KERNEL);
+
+  if (kbuf == NULL) {
+    pr_err("Could not kmalloc");
+    return -EINVAL;
+  }
+
+#ifdef BASEBAND_DEBUG
+  printk(KERN_INFO "KBUF=%#x\n", (u32)kbuf);
+  printk(KERN_INFO "DMAHANDLE=%#x\n", (u32)dma_handle);
+#endif /* BASEBAND_DEBUG */
+
+  // do the dma
+  iowrite32(1, baseband_registers + DMA_EN);
+  iowrite32((u32)dma_handle, baseband_registers + DMA_S2M_BASE);
+  iowrite32(((size + 3) >> 2) - 1, baseband_registers + DMA_S2M_LENGTH);
+  // iowrite32(0, baseband_registers + DMA_S2M_CYCLES);
+  // iowrite32(0, baseband_registers + DMA_S2M_FIXED);
+  mb();
+  iowrite32(0, baseband_registers + DMA_S2M_WGO_RREMAINING);
+  mb();
+
+#ifdef BASEBAND_DEBUG
+  printk(KERN_INFO "remaining = %d\n", ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING));
+  printk(KERN_INFO "initiated dma, now waiting\n");
+#endif /* BASEBAND_DEBUG */
+
+  wait_cnt = 0;
+  while (ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING) != 0 && wait_cnt < 1000000) {
+    // udelay(10);
+    wait_cnt++;
+  }
+  if (wait_cnt == 1000000) {
+    pr_err("timeout on dma (remaining)");
+  }
+
+#ifdef BASEBAND_DEBUG
+  printk(KERN_INFO "remaining = %d\n", ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING));
+  printk(KERN_INFO "done polling, now mapping\n");
+#endif /* BASEBAND_DEBUG */
+
+  mb();
+  for (i = 0; i < 8; i++) {
+    printk(KERN_INFO "kbuf[%d] = %x", i, ((u32*)kbuf)[i]);
+  }
+  ((u32*)kbuf)[0] = 0xDEADBEEF;
+
+  if (copy_to_user(user_buffer, kbuf, size)) {
+    return -EFAULT;
+  }
+
+  dma_free_coherent(&baseband_dev, size, kbuf, dma_handle);
+
+  return size;
 }
 
 static int baseband_write(
@@ -88,6 +151,64 @@ static int baseband_write(
     size_t size,
     loff_t * offset)
 {
+  void *kbuf;
+  static dma_addr_t dbuf;
+  unsigned long wait_cnt;
+  int i;
+
+  kbuf = dma_alloc_coherent(&baseband_dev, size, &dbuf, GFP_KERNEL);
+
+  if (kbuf == NULL) {
+    goto err_alloc_coherent_fail;
+  }
+
+#ifdef BASEBAND_DEBUG
+  printk(KERN_INFO "KBUF=%#x\n", (u32)kbuf);
+  printk(KERN_INFO "DBUF=%#x\n", (u32)dbuf);
+#endif /* BASEBAND_DEBUG */
+
+  // copy into buffer
+  if (copy_from_user(kbuf, user_buffer, size)) {
+    goto err_copy_from_user_fail;
+  }
+  wmb();
+
+#ifdef BASEBAND_DEBUG
+  for (i = 0; i < 4; i++) {
+    printk(KERN_INFO "k[%d] = %d\n", i, ((u32*)kbuf)[i]);
+  }
+#endif
+
+  // do the dma
+  iowrite32(1, baseband_registers + DMA_EN);
+  iowrite32((u32)dbuf, baseband_registers + DMA_M2S_BASE);
+  iowrite32(((size + 3) >> 2) - 1, baseband_registers + DMA_M2S_LENGTH);
+  mb();
+  iowrite32(0, baseband_registers + DMA_M2S_WGO_RREMAINING);
+  mb();
+
+#ifdef BASEBAND_DEBUG
+  printk(KERN_INFO "remaining = %d\n", ioread32(baseband_registers + DMA_M2S_WGO_RREMAINING));
+  printk(KERN_INFO "initiated dma, now waiting\n");
+#endif /* BASEBAND_DEBUG */
+
+  wait_cnt = 0;
+  while (ioread32(baseband_registers + DMA_M2S_WGO_RREMAINING) != 0 && wait_cnt < 1000000) {
+    // udelay(10);
+    wait_cnt++;
+  }
+  if (wait_cnt == 1000000) {
+    pr_err("timeout on dma (remaining)");
+    goto err_timeout;
+  }
+
+  dma_free_coherent(&baseband_dev, size, kbuf, dbuf);
+  return size;
+
+err_timeout:
+err_copy_from_user_fail:
+  dma_free_coherent(&baseband_dev, size, kbuf, dbuf);
+err_alloc_coherent_fail:
   return -EINVAL;
 }
 
@@ -115,9 +236,9 @@ static int baseband_mmap(struct file *file, struct vm_area_struct *vma)
 {
   unsigned long len = vma->vm_end - vma->vm_start;
   void *kbuf;
-  static dma_addr_t dma_handle;
+  // static dma_addr_t dma_handle;
   unsigned long wait_cnt;
-
+  int i;
 
   kbuf = kmalloc(len, GFP_KERNEL);
 
@@ -129,13 +250,13 @@ static int baseband_mmap(struct file *file, struct vm_area_struct *vma)
   printk(KERN_INFO "kmalloc success\n");
 
   // prepare memory range for dma
-  dma_handle = dma_map_single(&baseband_dev, kbuf, len, DMA_FROM_DEVICE);
-  if (dma_mapping_error(&baseband_dev, dma_handle)) {
-    pr_err("dma mapping error\n");
-    kfree(kbuf);
-    kbuf = NULL;
-    return -EIO;
-  }
+  // dma_handle = dma_map_single(&baseband_dev, kbuf, len, DMA_FROM_DEVICE, 0);
+  // if (dma_mapping_error(&baseband_dev, dma_handle)) {
+  //   pr_err("dma mapping error\n");
+  //   kfree(kbuf);
+  //   kbuf = NULL;
+  //   return -EIO;
+  // }
 
   // do the dma
   iowrite32(1, baseband_registers + DMA_EN);
@@ -154,26 +275,36 @@ static int baseband_mmap(struct file *file, struct vm_area_struct *vma)
 
   wait_cnt = 0;
   while (ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING) != 0 && wait_cnt < 1000000) {
+    udelay(10);
     wait_cnt++;
   }
   if (wait_cnt == 1000000) {
     pr_err("timeout on dma (remaining)");
   }
-  wait_cnt = 0;
-  while (ioread32(baseband_registers + DMA_IDLE) == 0 && wait_cnt < 1000) {
-    wait_cnt++;
-  }
-  if (wait_cnt == 1000) {
-    pr_err("timeout on dma (idle)");
-  }
+
+  // wait_cnt = 0;
+  // while (ioread32(baseband_registers + DMA_IDLE) == 0 && wait_cnt < 1000) {
+  //   udelay(10);
+  //   wait_cnt++;
+  // }
+  // if (wait_cnt == 1000) {
+  //   pr_err("timeout on dma (idle)");
+  // }
 
 #ifdef BASEBAND_DEBUG
+  printk(KERN_INFO "remaining = %d\n", ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING));
   printk(KERN_INFO "done polling, now mapping\n");
 #endif /* BASEBAND_DEBUG */
 
   // dma is over
-  dma_unmap_single(&baseband_dev, dma_handle, len, DMA_FROM_DEVICE);
-  vma->vm_private_data = kbuf; // save for freeing later
+  // dma_unmap_single(&baseband_dev, dma_handle, len, DMA_FROM_DEVICE);
+  // vma->vm_private_data = kbuf; // save for freeing later
+
+  for (i = 0; i < 4; i++) {
+    printk(KERN_INFO "kbuf[%d] = %x", i, ((u32*)kbuf)[i]);
+  }
+
+  ((u32*)kbuf)[0] = 0xDEADBEEF;
 
   // map to users
   if (remap_pfn_range(vma, vma->vm_start, (uint32_t)kbuf, len, vma->vm_page_prot) < 0) {
@@ -264,6 +395,7 @@ static int baseband_drv_probe(struct platform_device *op)
   if (!match) {
     return -EINVAL;
   }
+  baseband_dev = op->dev;
 
   rc = of_address_to_resource(op->dev.of_node, 0, &baseband_res);
   if (rc) {
