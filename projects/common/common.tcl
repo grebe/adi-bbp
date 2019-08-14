@@ -79,8 +79,9 @@ proc update_rxtx {old new} {
 proc make_baseband {base_address} {
   set baseband [create_bd_cell -type ip -vlnv cs.berkeley.edu:user:baseband:1.0 baseband]
   ad_cpu_interconnect $base_address Baseband
-  # ad_mem_hp3_interconnect sys_cpu_clk sys_ps7/S_AXI_HP3
-  ad_mem_hp0_interconnect sys_cpu_clk Baseband/m_axi
+  ad_mem_hp3_interconnect sys_cpu_clk sys_ps7/S_AXI_HP3
+  ad_mem_hp3_interconnect sys_cpu_clk Baseband/m_axi
+  # ad_mem_hp0_interconnect sys_cpu_clk Baseband/m_axi
 }
 
 proc add_ila {} {

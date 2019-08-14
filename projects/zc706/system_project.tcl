@@ -2,7 +2,7 @@ set ad_hdl_dir $::env(ADI_HDL_DIR)
 set ad_phdl_dir $::env(ADI_HDL_DIR)
 
 source $ad_hdl_dir/projects/scripts/adi_board.tcl
-source $ad_hdl_dir/projects/scripts/adi_project.tcl
+source $ad_hdl_dir/projects/scripts/adi_project_xilinx.tcl
 
 set sys_zynq 1
 
@@ -39,13 +39,17 @@ make_targets zc706.srcs/sources_1
 
 project_run_synth zc706
 
+set_property DONT_TOUCH true [get_nets -hier -regexp .*/axi_hp3_interconnect/S00_AXI_.*]
+set_property mark_debug true [get_nets -hier -regexp .*/axi_hp3_interconnect/S00_AXI_.*]
+set_property DONT_TOUCH true [get_nets -hier -regexp .*/axi_hp3_interconnect/M00_AXI_.*]
+set_property mark_debug true [get_nets -hier -regexp .*/axi_hp3_interconnect/M00_AXI_.*]
+
 add_ila
 place_ila
 
 project_run_impl zc706
 
 source $ad_hdl_dir/library/axi_ad9361/axi_ad9361_delay.tcl
-
 
 #start_gui
 
