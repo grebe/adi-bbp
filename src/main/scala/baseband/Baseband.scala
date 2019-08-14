@@ -115,7 +115,7 @@ class Baseband(
     val dac_dunf = IO(Output(Bool()))
 
     // axi master interface
-    val m_axi_aclk = IO(Input(Clock()))
+    // val m_axi_aclk = IO(Input(Clock()))
     val m_axi_aresetn = IO(Output(Bool()))
     val m_axi_awvalid = IO(Output(Bool()))
     val m_axi_awid = IO(Output(Bool()))
@@ -213,8 +213,8 @@ class Baseband(
     m_axi_awsize := axiMaster.aw.bits.size
     m_axi_awburst := axiMaster.aw.bits.burst
     m_axi_awlock := axiMaster.aw.bits.lock
-    m_axi_awcache := axiMaster.aw.bits.cache
-    m_axi_awprot := axiMaster.aw.bits.prot
+    m_axi_awcache := 3.U // axiMaster.aw.bits.cache
+    m_axi_awprot := 0.U // axiMaster.aw.bits.prot
     axiMaster.aw.ready := m_axi_awready
 
     m_axi_wvalid := axiMaster.w.valid
@@ -235,8 +235,8 @@ class Baseband(
     m_axi_arsize := axiMaster.ar.bits.size
     m_axi_arburst := axiMaster.ar.bits.burst
     m_axi_arlock := axiMaster.ar.bits.lock
-    m_axi_arcache := axiMaster.ar.bits.cache
-    m_axi_arprot := axiMaster.ar.bits.prot
+    m_axi_arcache := 3.U // axiMaster.ar.bits.cache
+    m_axi_arprot := 0.U // axiMaster.ar.bits.prot
     axiMaster.ar.ready := m_axi_arready
 
     axiMaster.r.valid := m_axi_rvalid

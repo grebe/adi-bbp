@@ -9,8 +9,6 @@ export ADI_PHDL_DIR := $(M_DIR)/../hdl
 # export ADI_IGNORE_VERSION_CHECK := 1
 
 M_DEPS := baseband_ip.tcl
-M_DEPS += $(ADI_HDL_DIR)/library/scripts/adi_env.tcl
-M_DEPS += $(ADI_HDL_DIR)/library/scripts/adi_ip.tcl
 M_DEPS += baseband.xdc
 M_DEPS += Baseband.v
 
@@ -43,8 +41,10 @@ baseband.xpr: $(M_DEPS)
 
 sim: baseband.xpr
 	$(M_VIVADO) baseband_test.tcl |& tee baseband_test.log
-
 .PHONY: sim
+
+xilinx: baseband.xpr
+.PHONY: xilinx
 
 -include Makefrag.mill
 

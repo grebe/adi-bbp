@@ -1,6 +1,5 @@
 # ip
 
-# adi_ip_create
 create_project baseband . -force
 
 ## add files
@@ -84,15 +83,15 @@ ipx::infer_bus_interface {\
   m_axi_rready }\
 xilinx.com:interface:aximm_rtl:1.0 [ipx::current_core]
 
-ipx::infer_bus_interface m_axi_aclk xilinx.com:signal:clock_rtl:1.0 [ipx::current_core]
-ipx::infer_bus_interface m_axi_aresetn xilinx.com:signal:reset_rtl:1.0 [ipx::current_core]
-
-ipx::add_bus_parameter ASSOCIATED_BUSIF [ipx::get_bus_interfaces m_axi_aclk \
+set_property master_address_space_ref m_axi \
+  [ipx::get_bus_interfaces m_axi \
   -of_objects [ipx::current_core]]
 
-set_property value m_axi [ipx::get_bus_parameters ASSOCIATED_BUSIF \
-  -of_objects [ipx::get_bus_interfaces m_axi_aclk \
-  -of_objects [ipx::current_core]]]
+# ipx::infer_bus_interface m_axi_aclk xilinx.com:signal:clock_rtl:1.0 [ipx::current_core]
+# ipx::infer_bus_interface m_axi_aresetn xilinx.com:signal:reset_rtl:1.0 [ipx::current_core]
+# 
+# ipx::add_bus_parameter ASSOCIATED_BUSIF [ipx::get_bus_interfaces m_axi_aclk \
+#   -of_objects [ipx::current_core]]
 
 ipx::save_core [ipx::current_core]
 
@@ -136,11 +135,11 @@ if {$raddr_width != $waddr_width} {
 }
 
 ipx::add_memory_map {m_axi} [ipx::current_core]
-# set_property master_memory_map_ref {m_axi} [ipx::get_bus_interfaces m_axi -of_objects [ipx::current_core]]
-ipx::add_address_block {axi_lite} [ipx::get_memory_maps m_axi -of_objects [ipx::current_core]]
-set_property range $range [ipx::get_address_blocks axi_lite \
+ipx::add_address_block {axi} [ipx::get_memory_maps m_axi -of_objects [ipx::current_core]]
+set_property range $range [ipx::get_address_blocks axi \
   -of_objects [ipx::get_memory_maps m_axi -of_objects [ipx::current_core]]]
-ipx::associate_bus_interfaces -clock m_axi_aclk -reset m_axi_aresetn [ipx::current_core]
+ipx::associate_bus_interfaces -clock s_axi_aclk -reset s_axi_aresetn [ipx::current_core]
+# m_axi_aresetn
 
 ipx::add_memory_map {s_axi} [ipx::current_core]
 set_property slave_memory_map_ref {s_axi} [ipx::get_bus_interfaces s_axi -of_objects [ipx::current_core]]
@@ -158,7 +157,7 @@ ipx::save_core
 # ipx::remove_bus_interface adc_data_i1 [ipx::current_core]
 # ipx::remove_bus_interface adc_data_q0 [ipx::current_core]
 # ipx::remove_bus_interface adc_data_q1 [ipx::current_core]
-# 
+#
 # ipx::remove_bus_interface dac_valid_i0 [ipx::current_core]
 # ipx::remove_bus_interface dac_valid_i1 [ipx::current_core]
 # ipx::remove_bus_interface dac_valid_q0 [ipx::current_core]
@@ -176,10 +175,17 @@ ipx::remove_bus_interface clock [ipx::current_core]
 ipx::infer_bus_interface reset xilinx.com:signal:reset_rtl:1.0 [ipx::current_core]
 ipx::infer_bus_interface clock xilinx.com:signal:clock_rtl:1.0 [ipx::current_core]
 
-ipx::add_bus_parameter ASSOCIATED_BUSIF [ipx::get_bus_interfaces s_axi_aclk \
+ipx::add_bus_parameter ASSOCIATED_BUSIF [ipx::get_bus_interfaces s_axi_aresetn \
   -of_objects [ipx::current_core]]
 
 set_property value s_axi [ipx::get_bus_parameters ASSOCIATED_BUSIF \
+  -of_objects [ipx::get_bus_interfaces s_axi_aresetn \
+  -of_objects [ipx::current_core]]]
+
+ipx::add_bus_parameter ASSOCIATED_BUSIF [ipx::get_bus_interfaces s_axi_aclk \
+  -of_objects [ipx::current_core]]
+
+set_property value s_axi:m_axi [ipx::get_bus_parameters ASSOCIATED_BUSIF \
   -of_objects [ipx::get_bus_interfaces s_axi_aclk \
   -of_objects [ipx::current_core]]]
 
