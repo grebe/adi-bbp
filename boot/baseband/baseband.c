@@ -17,13 +17,6 @@
 
 #define ADDRESS_SHIFT 2 // 32-bit words
 
-#define STREAM_ALIGNER_BASE           0x100
-#define STREAM_ALIGNER_EN             (STREAM_ALIGNER_BASE + (0x0 << ADDRESS_SHIFT))
-#define STREAM_ALIGNER_ALIGNED        (STREAM_ALIGNER_BASE + (0x1 << ADDRESS_SHIFT))
-#define STREAM_ALIGNER_CNT            (STREAM_ALIGNER_BASE + (0x2 << ADDRESS_SHIFT))
-#define STREAM_ALIGNER_MAXCNT         (STREAM_ALIGNER_BASE + (0x3 << ADDRESS_SHIFT))
-#define STREAM_ALIGNER_CNTPASSTHROUGH (STREAM_ALIGNER_BASE + (0x4 << ADDRESS_SHIFT))
-
 #define DMA_BASE               0x0
 #define DMA_EN                 (DMA_BASE + (0x0 << ADDRESS_SHIFT))
 #define DMA_IDLE               (DMA_BASE + (0x1 << ADDRESS_SHIFT))
@@ -40,13 +33,26 @@
 #define DMA_M2S_FIXED          (DMA_BASE + (0xC << ADDRESS_SHIFT))
 #define DMA_M2S_WGO_RREMAINING (DMA_BASE + (0xD << ADDRESS_SHIFT))
 
+#define STREAM_ALIGNER_BASE           0x100
+#define STREAM_ALIGNER_EN             (STREAM_ALIGNER_BASE + (0x0 << ADDRESS_SHIFT))
+#define STREAM_ALIGNER_ALIGNED        (STREAM_ALIGNER_BASE + (0x1 << ADDRESS_SHIFT))
+#define STREAM_ALIGNER_CNT            (STREAM_ALIGNER_BASE + (0x2 << ADDRESS_SHIFT))
+#define STREAM_ALIGNER_MAXCNT         (STREAM_ALIGNER_BASE + (0x3 << ADDRESS_SHIFT))
+#define STREAM_ALIGNER_CNTPASSTHROUGH (STREAM_ALIGNER_BASE + (0x4 << ADDRESS_SHIFT))
+
+#define SKID_BASE       0x200
+#define SKID_EN         (SKID_BASE + (0x0 << ADDRESS_SHIFT))
+#define SKID_WATERSHED  (SKID_BASE + (0x1 << ADDRESS_SHIFT))
+#define SKID_COUNT      (SKID_BASE + (0x2 << ADDRESS_SHIFT))
+#define SKID_OVERFLOWED (SKID_BASE + (0x3 << ADDRESS_SHIFT))
+
 #define IOCTL_STREAM_ALIGNER_MAXCNT         0
 #define IOCTL_STREAM_ALIGNER_ALIGNED        1
 #define IOCTL_STREAM_ALIGNER_CNT            2
 #define IOCTL_STREAM_ALIGNER_CNTPASSTHROUGH 3
 #define IOCTL_STREAM_ALIGNER_EN             4
-#define IOCTL_PALLOC                        5
-#define IOCTL_PFREE                         6
+#define IOCTL_SKID_OVERFLOWED               5
+#define IOCTL_SKID_SET_OVERFLOW             6
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Paul Rigge");
@@ -80,36 +86,40 @@ static int baseband_open(struct inode *inode, struct file *file)
 static int baseband_read(struct file *file, char __user *user_buffer, size_t size, loff_t *offset)
 {
   void *kbuf;
-  static dma_addr_t dma_handle;
+  dma_addr_t dbuf;
   unsigned long wait_cnt;
-  int i;
+  int err;
 
-  // if (dma_set_coherent_mask(&baseband_dev, 0x3FFFFFFFL)) {
-  //   pr_err("Could not set mask");
-  //   return -EINVAL;
-  // }
-
-  kbuf = dma_alloc_coherent(&baseband_dev, size, &dma_handle, GFP_KERNEL);
+  kbuf = dma_alloc_coherent(&baseband_dev, size, &dbuf, GFP_KERNEL);
 
   if (kbuf == NULL) {
     pr_err("Could not kmalloc");
-    return -EINVAL;
+    err = -EINVAL;
+    goto err_alloc;
   }
 
 #ifdef BASEBAND_DEBUG
   printk(KERN_INFO "KBUF=%#x\n", (u32)kbuf);
-  printk(KERN_INFO "DMAHANDLE=%#x\n", (u32)dma_handle);
+  printk(KERN_INFO "DMAHANDLE=%#x\n", (u32)dbuf);
 #endif /* BASEBAND_DEBUG */
 
-  // do the dma
+  // configure the dma
   iowrite32(1, baseband_registers + DMA_EN);
-  iowrite32((u32)dma_handle, baseband_registers + DMA_S2M_BASE);
+  iowrite32((u32)dbuf, baseband_registers + DMA_S2M_BASE);
   iowrite32(((size + 3) >> 2) - 1, baseband_registers + DMA_S2M_LENGTH);
   // iowrite32(0, baseband_registers + DMA_S2M_CYCLES);
   // iowrite32(0, baseband_registers + DMA_S2M_FIXED);
-  mb();
+
+  // do the dma
+  // flush the queues in front of the dma by disabling the skid
+  iowrite32(0, baseband_registers + SKID_EN);
+  // disable aligner, will turn back on after dma enabled
+  iowrite32(0, baseband_registers + STREAM_ALIGNER_EN);
+  // start the dma engine
   iowrite32(0, baseband_registers + DMA_S2M_WGO_RREMAINING);
-  mb();
+  // enable the skid and aligner to feed the dma
+  iowrite32(1, baseband_registers + STREAM_ALIGNER_EN);
+  iowrite32(1, baseband_registers + SKID_EN);
 
 #ifdef BASEBAND_DEBUG
   printk(KERN_INFO "remaining = %d\n", ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING));
@@ -117,32 +127,41 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
 #endif /* BASEBAND_DEBUG */
 
   wait_cnt = 0;
-  while (ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING) != 0 && wait_cnt < 1000000) {
-    // udelay(10);
+  while (ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING) != 0) { // && wait_cnt < 1000000) {
+    udelay(1);
     wait_cnt++;
   }
+  // waiting is done, disable skid so it doesn't overflow
+  iowrite32(0, baseband_registers + SKID_EN);
   if (wait_cnt == 1000000) {
     pr_err("timeout on dma (remaining)");
+    err = -EFAULT;
+    goto err_timeout;
   }
 
 #ifdef BASEBAND_DEBUG
   printk(KERN_INFO "remaining = %d\n", ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING));
   printk(KERN_INFO "done polling, now mapping\n");
+  if (ioread32(baseband_registers + SKID_OVERFLOWED)) {
+    pr_err("skid buffer overflowed");
+  }
 #endif /* BASEBAND_DEBUG */
 
-  mb();
-  for (i = 0; i < 8; i++) {
-    printk(KERN_INFO "kbuf[%d] = %x", i, ((u32*)kbuf)[i]);
-  }
-  ((u32*)kbuf)[0] = 0xDEADBEEF;
-
+  rmb();
   if (copy_to_user(user_buffer, kbuf, size)) {
-    return -EFAULT;
+    err = -EFAULT;
+    goto err_copy;
   }
 
-  dma_free_coherent(&baseband_dev, size, kbuf, dma_handle);
+  dma_free_coherent(&baseband_dev, size, kbuf, dbuf);
 
   return size;
+
+err_copy:
+err_timeout:
+  dma_free_coherent(&baseband_dev, size, kbuf, dbuf);
+err_alloc:
+  return err;
 }
 
 static int baseband_write(
@@ -317,7 +336,6 @@ static int baseband_mmap(struct file *file, struct vm_area_struct *vma)
 
 static long baseband_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-  static char *kbuf = NULL;
 #ifdef BASEBAND_DEBUG
   unsigned long temp;
 #endif /* BASEBAND_DEBUG */
@@ -356,17 +374,11 @@ static long baseband_ioctl(struct file *file, unsigned int cmd, unsigned long ar
       iowrite32(arg, baseband_registers + STREAM_ALIGNER_EN);
       break;
 
-    case IOCTL_PALLOC:
-      kbuf = kmalloc(arg, GFP_KERNEL);
+    case IOCTL_SKID_OVERFLOWED:
+      return ioread32(baseband_registers + SKID_OVERFLOWED);
 
-      if (kbuf == NULL) {
-        pr_err("Could not kmalloc");
-        return -EINVAL;
-      }
-      return (long)kbuf;
-
-    case IOCTL_PFREE:
-      kfree((void *)arg);
+    case IOCTL_SKID_SET_OVERFLOW:
+      iowrite32(arg, baseband_registers + SKID_OVERFLOWED);
       break;
 
     default:

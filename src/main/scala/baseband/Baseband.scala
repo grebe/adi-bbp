@@ -5,18 +5,25 @@ import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.amba.axi4stream._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy._
+import freechips.rocketchip.interrupts.{IntSinkNode, IntSinkParameters, IntSinkPortParameters}
 import freechips.rocketchip.subsystem.CrossingWrapper
+import ofdm.AXI4SkidBuffer
 
 class Baseband(
   val adcWidth: Int = 16,
   val dacWidth: Int = 16,
   val csrAddress: AddressSet = AddressSet(0, 0xFF),
+  val alignAddress: AddressSet = AddressSet(0x100, 0xFF),
+  val skidAddress: AddressSet = AddressSet(0x200, 0xFF),
   val mstAddress: Seq[AddressSet] = Seq(AddressSet(0x0, BigInt("FF" * 4, 16))),
 ) extends LazyModule()(Parameters.empty) {
   val beatBytes = 4
   val sAxiIsland = LazyModule(new CrossingWrapper(AsynchronousCrossing(safe=false)) with HasAXI4StreamCrossing)
 
   val dma = sAxiIsland { LazyModule(new StreamingAXI4DMAWithCSR(csrAddress = csrAddress, beatBytes = beatBytes)) }
+
+  val (skidStream, skidMem, skidIntSource) = sAxiIsland { AXI4SkidBuffer(skidAddress, depth = 256, beatBytes = 4) }
+  val intSink = IntSinkNode(Seq(IntSinkPortParameters(Seq(IntSinkParameters()))))
 
   val axiMasterNode = AXI4MasterNode(Seq(AXI4MasterPortParameters(Seq(AXI4MasterParameters(
     "baseband",
@@ -27,20 +34,13 @@ class Baseband(
     supportsRead = TransferSizes(4, 512),
   )), beatBytes = beatBytes)))
 
-  // val axiMasterIslandNode = AXI4IdentityNode()
-  // val axiSlaveIslandNode = AXI4IdentityNode()
-
-  // axiMasterIslandNode := axiMasterNode
-  // axiSlaveNode := axiSlaveIslandNode
-
   val streamNodeMaster = AXI4StreamMasterNode(AXI4StreamMasterParameters(n = 4, u=1, numMasters = 1))
   val streamNodeSlave = AXI4StreamSlaveNode(AXI4StreamSlaveParameters(numEndpoints = 1, hasStrb = true))
 
-  val (alignerStream, alignerAXI) = StreamAligner(addressSet = AddressSet(0x100, 0xFF), beatBytes = beatBytes)
+  val (alignerStream, alignerAXI) = StreamAligner(addressSet = alignAddress, beatBytes = beatBytes)
   val xbar = sAxiIsland { AXI4Xbar() }
 
-  sAxiIsland.crossAXI4StreamIn(dma.streamNode) :=
-    // AXI4StreamWidthAdapter.nToOne(2) :=
+  sAxiIsland.crossAXI4StreamIn(dma.streamNode := skidStream) :=
     AXI4StreamBuffer() :=
     alignerStream :=
     AXI4StreamBuffer() :=
@@ -48,14 +48,14 @@ class Baseband(
 
   streamNodeSlave :=
     AXI4StreamBuffer() :=
-    // AXI4StreamWidthAdapter.oneToN(2) :=
     sAxiIsland.crossAXI4StreamOut(dma.streamNode)
 
   alignerAXI := sAxiIsland.crossAXI4Out(xbar)
   sAxiIsland {
+    intSink := skidIntSource
     dma.axiSlaveNode := xbar
-    xbar := axiMasterNode // axiMasterIslandNode
-    // axiSlaveIslandNode := dma.axiMasterNode
+    skidMem := xbar
+    xbar := axiMasterNode
     axiSlaveNode := dma.axiMasterNode
   }
 
@@ -64,6 +64,7 @@ class Baseband(
     val axiMaster = axiSlaveNode.in.head._1
     val streamIn = streamNodeMaster.out.head._1
     val streamOut = streamNodeSlave.in.head._1
+    val intOut = intSink.in.head._1
 
     // adc inputs
     val adc_valid_i0 = IO(Input(Bool()))
@@ -175,6 +176,9 @@ class Baseband(
     val s_axi_rresp = IO(Output(UInt(2.W)))
     val s_axi_rready = IO(Input(Bool()))
 
+    val skid_ints = IO(Output(Vec(2, Bool())))
+    skid_ints := intOut
+
     sAxiIsland.module.clock := s_axi_aclk
     sAxiIsland.module.reset := !s_axi_aresetn
 
@@ -213,8 +217,8 @@ class Baseband(
     m_axi_awsize := axiMaster.aw.bits.size
     m_axi_awburst := axiMaster.aw.bits.burst
     m_axi_awlock := axiMaster.aw.bits.lock
-    m_axi_awcache := 3.U // axiMaster.aw.bits.cache
-    m_axi_awprot := 0.U // axiMaster.aw.bits.prot
+    m_axi_awcache := axiMaster.aw.bits.cache
+    m_axi_awprot := axiMaster.aw.bits.prot
     axiMaster.aw.ready := m_axi_awready
 
     m_axi_wvalid := axiMaster.w.valid
@@ -235,8 +239,8 @@ class Baseband(
     m_axi_arsize := axiMaster.ar.bits.size
     m_axi_arburst := axiMaster.ar.bits.burst
     m_axi_arlock := axiMaster.ar.bits.lock
-    m_axi_arcache := 3.U // axiMaster.ar.bits.cache
-    m_axi_arprot := 0.U // axiMaster.ar.bits.prot
+    m_axi_arcache := axiMaster.ar.bits.cache
+    m_axi_arprot := axiMaster.ar.bits.prot
     axiMaster.ar.ready := m_axi_arready
 
     axiMaster.r.valid := m_axi_rvalid

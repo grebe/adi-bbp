@@ -87,7 +87,7 @@ if { [file exists baseband.srcs/sources_1/bd/test_bd/test_bd.bd] != 1 } {
   connect_bd_net [get_bd_ports clock] [get_bd_pins axi4stream_vip_master/aclk]
   connect_bd_net [get_bd_ports clock] [get_bd_pins Baseband_0/clock]
   connect_bd_net [get_bd_ports clock] [get_bd_pins Baseband_0/s_axi_aclk]
-  connect_bd_net [get_bd_ports clock] [get_bd_pins Baseband_0/m_axi_aclk]
+  # connect_bd_net [get_bd_ports clock] [get_bd_pins Baseband_0/m_axi_aclk]
   connect_bd_net [get_bd_ports aresetn] [get_bd_pins axi_vip_master/aresetn]
   connect_bd_net [get_bd_ports aresetn] [get_bd_pins axi_vip_slave/aresetn]
   connect_bd_net [get_bd_ports aresetn] [get_bd_pins axi4stream_vip_master/aresetn]
