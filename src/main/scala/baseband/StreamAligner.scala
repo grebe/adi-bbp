@@ -3,7 +3,7 @@ package baseband
 import chisel3._
 import chisel3.util.log2Ceil
 import freechips.rocketchip.amba.axi4.AXI4RegisterNode
-import freechips.rocketchip.amba.axi4stream.AXI4StreamIdentityNode
+import freechips.rocketchip.amba.axi4stream.{AXI4StreamBundlePayload, AXI4StreamIdentityNode}
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.regmapper.RegField
@@ -36,24 +36,40 @@ class StreamAligner
 
     val enPrev = RegNext(en, false.B)
 
-    when (streamNode.in.head._1.fire() || cntPassthrough) {
-      when(cnt === maxCountReg - 1.U) {
+    // if we're in cnt passthrough mode, we don't care about the input firing.
+    // we do care about the output firing.
+    val cntEnPassthrough = !aligned || streamNode.out.head._1.fire()
+    val cntEnNoPassthrough = streamNode.in.head._1.fire()
+
+    // when (streamNode.in.head._1.fire() || cntPassthrough) {
+    when (Mux(cntPassthrough, cntEnPassthrough, cntEnNoPassthrough)) {
+      when(cnt >= maxCountReg - 1.U) {
         cnt := 0.U
       }.otherwise {
-        cnt := cnt + 1.U
+        cnt := cnt +& 1.U
       }
     }
 
-    (streamNode.in zip streamNode.out) foreach { case ((in, pIn), (out, pOut)) =>
-      out.bits := in.bits
-      when (cntPassthrough) {
-        out.bits.data := cnt
-      }
+    (streamNode.in zip streamNode.out) foreach { case ((in, _), (out, outP)) =>
+      val cntBundle = Wire(new AXI4StreamBundlePayload(outP.bundle))
+      cntBundle.data := cnt
+      cntBundle.dest := 0.U
+      cntBundle.id   := 0.U
+      cntBundle.keep := 0.U
+      cntBundle.last := false.B
+      cntBundle.user := 0.U
+      cntBundle.strb := BigInt("1" * outP.bundle.n, 2).U
+      out.bits := Mux(cntPassthrough, cntBundle, in.bits)
     }
 
-    when (en && (cnt === 0.U || aligned)) {
-        aligned := true.B
+    when (en && cnt === 0.U) {
+      aligned := true.B
+    }
+    when (!en) {
+      aligned := false.B
+    }
 
+    when ((en && cnt === 0.U) || aligned) {
         (streamNode.in zip streamNode.out) foreach { case ((in, _), (out, _)) =>
           when (cntPassthrough) {
             out.valid := true.B
@@ -64,7 +80,6 @@ class StreamAligner
           }
         }
     } .otherwise {
-      aligned := false.B
       (streamNode.in zip streamNode.out) foreach { case ((in, _), (out, _)) =>
           out.valid := false.B
           in.ready := true.B

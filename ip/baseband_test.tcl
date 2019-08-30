@@ -1,6 +1,8 @@
 open_project baseband.xpr
 
 if { [file exists baseband.srcs/sources_1/bd/test_bd/test_bd.bd] != 1 } {
+  set_property ip_repo_paths [list ./] [current_fileset]
+  update_ip_catalog
   create_bd_design "test_bd"
   update_compile_order -fileset sources_1
   
@@ -13,7 +15,7 @@ if { [file exists baseband.srcs/sources_1/bd/test_bd/test_bd.bd] != 1 } {
   set_property -dict [list CONFIG.INTERFACE_MODE {SLAVE}] [get_bd_cells axi_vip_slave]
 
   # create baseband (DUT)
-  create_bd_cell -type module -reference Baseband Baseband_0
+  create_bd_cell -type ip -vlnv cs.berkeley.edu:user:baseband:1.0 Baseband_0
 
   # create constant 0
   create_bd_cell -type ip -vlnv xilinx.com:ip:xlconstant:1.1 xlconstant_0
@@ -76,27 +78,34 @@ if { [file exists baseband.srcs/sources_1/bd/test_bd/test_bd.bd] != 1 } {
   
   # create clocks/resets
   create_bd_port -dir I -type clk clock
+  create_bd_port -dir I -type clk rx_clock
   create_bd_port -dir I -type rst aresetn
   set_property CONFIG.POLARITY ACTIVE_LOW [get_bd_ports aresetn]
   create_bd_port -dir I -type rst reset
   set_property CONFIG.POLARITY ACTIVE_HIGH [get_bd_ports reset]
+  create_bd_port -dir I -type rst resetn
+  set_property CONFIG.POLARITY ACTIVE_LOW [get_bd_ports resetn]
   
   # connect clocks/resets
-  connect_bd_net [get_bd_ports clock] [get_bd_pins axi_vip_master/aclk]
-  connect_bd_net [get_bd_ports clock] [get_bd_pins axi_vip_slave/aclk]
-  connect_bd_net [get_bd_ports clock] [get_bd_pins axi4stream_vip_master/aclk]
-  connect_bd_net [get_bd_ports clock] [get_bd_pins Baseband_0/clock]
-  connect_bd_net [get_bd_ports clock] [get_bd_pins Baseband_0/s_axi_aclk]
-  # connect_bd_net [get_bd_ports clock] [get_bd_pins Baseband_0/m_axi_aclk]
-  connect_bd_net [get_bd_ports aresetn] [get_bd_pins axi_vip_master/aresetn]
-  connect_bd_net [get_bd_ports aresetn] [get_bd_pins axi_vip_slave/aresetn]
-  connect_bd_net [get_bd_ports aresetn] [get_bd_pins axi4stream_vip_master/aresetn]
-  connect_bd_net [get_bd_ports aresetn] [get_bd_pins Baseband_0/s_axi_aresetn]
-  connect_bd_net [get_bd_ports reset] [get_bd_pins Baseband_0/reset]
+  connect_bd_net [get_bd_ports clock]    [get_bd_pins axi_vip_master/aclk]
+  connect_bd_net [get_bd_ports clock]    [get_bd_pins axi_vip_slave/aclk]
+  connect_bd_net [get_bd_ports clock]    [get_bd_pins Baseband_0/s_axi_aclk]
+  connect_bd_net [get_bd_ports rx_clock] [get_bd_pins axi4stream_vip_master/aclk]
+  connect_bd_net [get_bd_ports rx_clock] [get_bd_pins Baseband_0/clock]
+  connect_bd_net [get_bd_ports aresetn]  [get_bd_pins axi_vip_master/aresetn]
+  connect_bd_net [get_bd_ports aresetn]  [get_bd_pins axi_vip_slave/aresetn]
+  connect_bd_net [get_bd_ports aresetn]  [get_bd_pins Baseband_0/s_axi_aresetn]
+  connect_bd_net [get_bd_ports resetn]   [get_bd_pins axi4stream_vip_master/aresetn]
+  connect_bd_net [get_bd_ports reset]    [get_bd_pins Baseband_0/reset]
   
-  assign_bd_address [get_bd_addr_segs {Baseband_0/s_axi/reg0 }]
-  set_property range 64K [get_bd_addr_segs {Baseband_0/s_axi/reg0 }]
-  set_property offset 0x79400000 [get_bd_addr_segs {Baseband_0/s_axi/reg0 }]
+  assign_bd_address -external -offset 0x79400000 -range 64K [get_bd_addr_segs {Baseband_0/m_axi/reg0 }]
+  assign_bd_address -external -offset 0x00000000 -range 1G  [get_bd_addr_segs {axi_vip_master/Master_AXI/Reg}]
+  # set_property range 64K [get_bd_addr_segs {Baseband_0/s_axi/reg0 }]
+  # set_property offset 0x79400000 [get_bd_addr_segs {Baseband_0/s_axi/reg0 }]
+
+  set_property CONFIG.CLK_DOMAIN s_axi_aclk [get_bd_intf_pins /Baseband_0/s_axi]
+  set_property CONFIG.CLK_DOMAIN s_axi_aclk [get_bd_intf_pins /Baseband_0/m_axi]
+
   
   # clean up bd and save it
   regenerate_bd_layout
@@ -116,5 +125,5 @@ if { [file exists baseband.srcs/sources_1/bd/test_bd/test_bd.bd] != 1 } {
   update_compile_order -fileset sim_1
 }
 
-set_property -name {xsim.simulate.runtime} -value {200000ns} -objects [get_filesets sim_1]
+set_property -name {xsim.simulate.runtime} -value {2000000000ns} -objects [get_filesets sim_1]
 launch_simulation

@@ -52,4 +52,4 @@ Baseband.v: $(CHISEL_SRCS)
 	cd $(CHISEL_DIR) && sbt "run -td $(M_DIR)"
 
 Baseband.fir: $(CHISEL_SRCS)
-	cd $(CHISEL_DIR) && sbt "run -td $(M_DIR) -X low" 
+	cd $(CHISEL_DIR) && sbt "run -td $(M_DIR) -X low -ll trace --full-stacktrace" 
