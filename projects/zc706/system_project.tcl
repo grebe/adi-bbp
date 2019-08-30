@@ -37,6 +37,7 @@ update_rxtx axi_ad9361 Baseband
 update_bd
 make_targets zc706.srcs/sources_1
 
+
 project_run_synth zc706
 
 set_property DONT_TOUCH true [get_nets -hier -regexp .*/axi_hp3_interconnect/S00_AXI_.*]

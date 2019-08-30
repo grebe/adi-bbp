@@ -77,8 +77,70 @@ set_property -dict {PACKAGE_PIN AC18 IOSTANDARD LVCMOS25} [get_ports gpio_muxout
 
 
 # clocks
-
 create_clock -period 4.000 -name rx_clk [get_ports rx_clk_in_p]
 
+# Input Delays
+# set_input_delay -clock [get_clocks {rx_clk}] -clock_fall -min -add_delay 0.25 [get_ports {rx_data_in_n[*]}]
+# set_input_delay -clock [get_clocks {rx_clk}] -clock_fall -max -add_delay 1.25 [get_ports {rx_data_in_n[*]}]
+# set_input_delay -clock [get_clocks {rx_clk}] -min -add_delay 0.25 [get_ports {rx_data_in_n[*]}]
+# set_input_delay -clock [get_clocks {rx_clk}] -max -add_delay 1.25 [get_ports {rx_data_in_n[*]}]
+# set_input_delay -clock [get_clocks {rx_clk}] -clock_fall -min -add_delay 0.25 [get_ports {rx_data_in_p[*]}]
+# set_input_delay -clock [get_clocks {rx_clk}] -clock_fall -max -add_delay 1.25 [get_ports {rx_data_in_p[*]}]
+# set_input_delay -clock [get_clocks {rx_clk}] -min -add_delay 0.25 [get_ports {rx_data_in_p[*]}]
+# set_input_delay -clock [get_clocks {rx_clk}] -max -add_delay 1.25 [get_ports {rx_data_in_p[*]}]
+# set_input_delay -clock [get_clocks {clk_fpga_0}] -min -add_delay [get_ports {iic_scl}]
+# set_input_delay -clock [get_clocks {clk_fpga_0}] -max -add_delay [get_ports {iic_scl}]
+# set_input_delay -clock [get_clocks {clk_fpga_0}] -min -add_delay [get_ports {iic_sda}]
+# set_input_delay -clock [get_clocks {clk_fpga_0}] -max -add_delay [get_ports {iic_sda}]
+# set_input_delay -clock [get_clocks {rx_clk}] -clock_fall -min -add_delay 0.25 [get_ports {rx_frame_in_n}]
+# set_input_delay -clock [get_clocks {rx_clk}] -clock_fall -max -add_delay 1.25 [get_ports {rx_frame_in_n}]
+# set_input_delay -clock [get_clocks {rx_clk}] -min -add_delay 0.25 [get_ports {rx_frame_in_n}]
+# set_input_delay -clock [get_clocks {rx_clk}] -max -add_delay 1.25 [get_ports {rx_frame_in_n}]
+# set_input_delay -clock [get_clocks {rx_clk}] -clock_fall -min -add_delay 0.25 [get_ports {rx_frame_in_p}]
+# set_input_delay -clock [get_clocks {rx_clk}] -clock_fall -max -add_delay 1.25 [get_ports {rx_frame_in_p}]
+# set_input_delay -clock [get_clocks {rx_clk}] -min -add_delay 0.25 [get_ports {rx_frame_in_p}]
+# set_input_delay -clock [get_clocks {rx_clk}] -max -add_delay 1.25 [get_ports {rx_frame_in_p}]
+# set_input_delay -clock [get_clocks {clk_fpga_0}] -min -add_delay [get_ports {tdd_sync}]
+# set_input_delay -clock [get_clocks {clk_fpga_0}] -max -add_delay [get_ports {tdd_sync}]
 
+# Output Delays
+# set_output_delay -clock [get_clocks {rx_clk}] -clock_fall -min -add_delay 0.0 [get_ports {tx_data_out_n[*]}]
+# set_output_delay -clock [get_clocks {rx_clk}] -clock_fall -max -add_delay 1.0 [get_ports {tx_data_out_n[*]}]
+# set_output_delay -clock [get_clocks {rx_clk}] -min -add_delay 0.0 [get_ports {tx_data_out_n[*]}]
+# set_output_delay -clock [get_clocks {rx_clk}] -max -add_delay 1.0 [get_ports {tx_data_out_n[*]}]
+# set_output_delay -clock [get_clocks {rx_clk}] -clock_fall -min -add_delay 0.0 [get_ports {tx_data_out_p[*]}]
+# set_output_delay -clock [get_clocks {rx_clk}] -clock_fall -max -add_delay 1.0 [get_ports {tx_data_out_p[*]}]
+# set_output_delay -clock [get_clocks {rx_clk}] -min -add_delay 0.0 [get_ports {tx_data_out_p[*]}]
+# set_output_delay -clock [get_clocks {rx_clk}] -max -add_delay 1.0 [get_ports {tx_data_out_p[*]}]
+# set_output_delay -clock [get_clocks {rx_clk}] -clock_fall -min -add_delay 0.0 [get_ports {tx_frame_out_n}]
+# set_output_delay -clock [get_clocks {rx_clk}] -clock_fall -max -add_delay 1.0 [get_ports {tx_frame_out_n}]
+# set_output_delay -clock [get_clocks {rx_clk}] -min -add_delay 0.0 [get_ports {tx_frame_out_n}]
+# set_output_delay -clock [get_clocks {rx_clk}] -max -add_delay 1.0 [get_ports {tx_frame_out_n}]
+# set_output_delay -clock [get_clocks {rx_clk}] -clock_fall -min -add_delay 0.0 [get_ports {tx_frame_out_p}]
+# set_output_delay -clock [get_clocks {rx_clk}] -clock_fall -max -add_delay 1.0 [get_ports {tx_frame_out_p}]
+# set_output_delay -clock [get_clocks {rx_clk}] -min -add_delay 0.0 [get_ports {tx_frame_out_p}]
+# set_output_delay -clock [get_clocks {rx_clk}] -max -add_delay 1.0 [get_ports {tx_frame_out_p}]
+
+# False paths in baseband CDC
+set_false_path \
+      -from i_system_wrapper/system_i/baseband/inst/axi4asink/AsyncQueueSource_1/mem_1_id_reg/C \
+      -to i_system_wrapper/system_i/baseband/inst/sAxiIsland/axi4asource/AsyncQueueSink_1/deq_bits_reg/sync_0_reg[2]/D
+set_false_path \
+      -from i_system_wrapper/system_i/axi_ad9361/inst/i_rx/i_up_adc_common/i_core_rst_reg/rst_reg/C \
+      -to i_system_wrapper/system_i/baseband/inst/sAxiIsland/axi4asource/AsyncQueueSource_1/AsyncValidSync_1/source_extend/sync_0/reg_0/q_reg/CLR
+set_false_path \
+      -from i_system_wrapper/system_i/axi_ad9361/inst/i_rx/i_up_adc_common/i_core_rst_reg/rst_reg/C \
+      -to i_system_wrapper/system_i/baseband/inst/sAxiIsland/axi4streamasource/AsyncQueueSource/AsyncValidSync/sink_valid/sync_0/reg_0/q_reg/CLR
+set_false_path \
+      -from i_system_wrapper/system_i/axi_ad9361/inst/i_rx/i_up_adc_common/i_core_rst_reg/rst_reg/C \
+      -to i_system_wrapper/system_i/baseband/inst/sAxiIsland/axi4streamasource/AsyncQueueSource/AsyncValidSync/sink_valid/sync_1/reg_0/q_reg/CLR
+set_false_path \
+      -from i_system_wrapper/system_i/axi_ad9361/inst/i_rx/i_up_adc_common/i_core_rst_reg/rst_reg/C \
+      -to i_system_wrapper/system_i/baseband/inst/sAxiIsland/axi4streamasource/AsyncQueueSource/AsyncValidSync/sink_valid/sync_2/reg_0/q_reg/CLR
+set_false_path \
+      -from i_system_wrapper/system_i/axi_ad9361/inst/i_rx/i_up_adc_common/i_core_rst_reg/rst_reg/C \
+      -to i_system_wrapper/system_i/baseband/inst/sAxiIsland/axi4streamasource/AsyncQueueSource/AsyncValidSync/sink_valid/sync_3/reg_0/q_reg/CLR
+set_false_path \
+      -from i_system_wrapper/system_i/sys_rstgen/U0/ACTIVE_LOW_PR_OUT_DFF[0].FDRE_PER_N/C \
+      -to i_system_wrapper/system_i/baseband/inst/axi4asink/AsyncQueueSink_1/AsyncValidSync/sink_valid/sync_3/reg_0/q_reg/CLR
 
