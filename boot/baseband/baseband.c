@@ -40,11 +40,13 @@
 #define STREAM_ALIGNER_MAXCNT         (STREAM_ALIGNER_BASE + (0x3 << ADDRESS_SHIFT))
 #define STREAM_ALIGNER_CNTPASSTHROUGH (STREAM_ALIGNER_BASE + (0x4 << ADDRESS_SHIFT))
 
-#define SKID_BASE       0x200
-#define SKID_EN         (SKID_BASE + (0x0 << ADDRESS_SHIFT))
-#define SKID_WATERSHED  (SKID_BASE + (0x1 << ADDRESS_SHIFT))
-#define SKID_COUNT      (SKID_BASE + (0x2 << ADDRESS_SHIFT))
-#define SKID_OVERFLOWED (SKID_BASE + (0x3 << ADDRESS_SHIFT))
+#define SKID_BASE                0x200
+#define SKID_EN                  (SKID_BASE + (0x0 << ADDRESS_SHIFT))
+#define SKID_WATERSHED           (SKID_BASE + (0x1 << ADDRESS_SHIFT))
+#define SKID_COUNT               (SKID_BASE + (0x2 << ADDRESS_SHIFT))
+#define SKID_OVERFLOWED          (SKID_BASE + (0x3 << ADDRESS_SHIFT))
+#define SKID_WOVERFLOWED         (SKID_BASE + (0x4 << ADDRESS_SHIFT))
+#define SKID_DRAIN_WHEN_DISABLED (SKID_BASE + (0x5 << ADDRESS_SHIFT))
 
 #define IOCTL_STREAM_ALIGNER_MAXCNT         0
 #define IOCTL_STREAM_ALIGNER_ALIGNED        1
@@ -104,22 +106,29 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
 #endif /* BASEBAND_DEBUG */
 
   // configure the dma
-  iowrite32(1, baseband_registers + DMA_EN);
+  iowrite32(0, baseband_registers + DMA_EN);
   iowrite32((u32)dbuf, baseband_registers + DMA_S2M_BASE);
   iowrite32(((size + 3) >> 2) - 1, baseband_registers + DMA_S2M_LENGTH);
   // iowrite32(0, baseband_registers + DMA_S2M_CYCLES);
   // iowrite32(0, baseband_registers + DMA_S2M_FIXED);
 
-  // do the dma
-  // flush the queues in front of the dma by disabling the skid
-  iowrite32(0, baseband_registers + SKID_EN);
   // disable aligner, will turn back on after dma enabled
   iowrite32(0, baseband_registers + STREAM_ALIGNER_EN);
+  // flush the queues in front of the dma by disabling the skid
+  iowrite32(1, baseband_registers + SKID_DRAIN_WHEN_DISABLED);
+  iowrite32(0, baseband_registers + SKID_EN);
+  iowrite32(0, baseband_registers + SKID_OVERFLOWED);
+  while (ioread32(baseband_registers + SKID_COUNT) > 0) {
+    pr_err("Skid draining (%d remaining)\n", ioread32(baseband_registers + SKID_COUNT));
+  }
+  // wait for things to flush
+  udelay(10);
   // start the dma engine
   iowrite32(0, baseband_registers + DMA_S2M_WGO_RREMAINING);
-  // enable the skid and aligner to feed the dma
-  iowrite32(1, baseband_registers + STREAM_ALIGNER_EN);
+  // enable the dma, skid, and aligner to feed the dma
+  iowrite32(1, baseband_registers + DMA_EN);
   iowrite32(1, baseband_registers + SKID_EN);
+  iowrite32(1, baseband_registers + STREAM_ALIGNER_EN);
 
 #ifdef BASEBAND_DEBUG
   printk(KERN_INFO "remaining = %d\n", ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING));
@@ -127,17 +136,16 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
 #endif /* BASEBAND_DEBUG */
 
   wait_cnt = 0;
-  while (ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING) != 0) { // && wait_cnt < 1000000) {
+  while (!ioread32(baseband_registers + DMA_IDLE)) {
+    // ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING) != 0) { // && wait_cnt < 1000000) {
     udelay(1);
+    pr_err("REMAINING = %d\n", ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING));
     wait_cnt++;
   }
   // waiting is done, disable skid so it doesn't overflow
   iowrite32(0, baseband_registers + SKID_EN);
-  if (wait_cnt == 1000000) {
-    pr_err("timeout on dma (remaining)");
-    err = -EFAULT;
-    goto err_timeout;
-  }
+  // also disable aligner
+  iowrite32(0, baseband_registers + STREAM_ALIGNER_EN);
 
 #ifdef BASEBAND_DEBUG
   printk(KERN_INFO "remaining = %d\n", ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING));
@@ -145,6 +153,7 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
   if (ioread32(baseband_registers + SKID_OVERFLOWED)) {
     pr_err("skid buffer overflowed");
   }
+  printk(KERN_INFO "IDLE = %d\n", ioread32(baseband_registers + DMA_IDLE));
 #endif /* BASEBAND_DEBUG */
 
   rmb();
@@ -158,7 +167,6 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
   return size;
 
 err_copy:
-err_timeout:
   dma_free_coherent(&baseband_dev, size, kbuf, dbuf);
 err_alloc:
   return err;
@@ -405,52 +413,60 @@ static int baseband_drv_probe(struct platform_device *op)
   match = of_match_device(baseband_of_match, &op->dev);
 
   if (!match) {
-    return -EINVAL;
+    rc = -EINVAL;
+    goto err_pre_alloc;
   }
   baseband_dev = op->dev;
 
   rc = of_address_to_resource(op->dev.of_node, 0, &baseband_res);
   if (rc) {
-    /* Fail */
-    return -ENODEV;
+    rc = -ENODEV;
+    goto err_pre_alloc;
   }
 
   if (!request_mem_region(baseband_res.start, resource_size(&baseband_res), "baseband")) {
-    /* Fail */
-    return -ENODEV;
+    rc = -ENODEV;
+    goto err_pre_alloc;
   }
 
   baseband_registers = of_iomap(op->dev.of_node, 0);
   if (!baseband_registers) {
-    /* Fail */
-    return -ENODEV;
+    rc = -ENODEV;
+    goto err_pre_alloc;
   }
   printk(KERN_INFO "Mapped baseband registers\n");
 
   if (alloc_chrdev_region(&dev, 0, 1, "baseband") < 0) {
-    return -EINVAL;
+    rc = -EINVAL;
+    goto err_pre_alloc;
   }
 
   if ( (cl = class_create(THIS_MODULE, "baseband")) == NULL) {
-    unregister_chrdev_region(dev, 1);
-    return -EINVAL;
+    rc = -EINVAL;
+    goto err_class_create;
   }
 
   if (device_create(cl, NULL, dev, NULL, "baseband") == NULL) {
-    class_destroy(cl);
-    unregister_chrdev_region(dev, 1);
-    return -EINVAL;
+    rc = -EINVAL;
+    goto err_device_create;
   }
 
   cdev_init(&c_dev, &baseband_fops);
   if (cdev_add(&c_dev, dev, 1) == -1) {
-    device_destroy(cl, dev);
-    class_destroy(cl);
-    unregister_chrdev_region(dev, 1);
-    return -EINVAL;
+    rc = -EINVAL;
+    goto err_cdev_add;
   }
 
   return 0;
+
+err_cdev_add:
+  device_destroy(cl, dev);
+err_device_create:
+  class_destroy(cl);
+err_class_create:
+  unregister_chrdev_region(dev, 1);
+err_pre_alloc:
+  return rc;
 }
 
 static int baseband_drv_remove(struct platform_device *op)
