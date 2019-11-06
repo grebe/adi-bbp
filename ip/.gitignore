@@ -3,7 +3,12 @@ component.xml
 
 AsyncResetReg.v
 Baseband.v
+NCOTableLUT*.v
+circularTable*.v
 baseband.xdc
+
+*.fir
+*.anno.json
 
 baseband.srcs/
 baseband.sim/
