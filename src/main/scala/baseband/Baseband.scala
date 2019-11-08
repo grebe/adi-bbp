@@ -12,10 +12,12 @@ import ofdm.AXI4SkidBuffer
 class Baseband(
   val adcWidth: Int = 16,
   val dacWidth: Int = 16,
-  val csrAddress: AddressSet = AddressSet(0, 0xFF),
-  val alignAddress: AddressSet = AddressSet(0x100, 0xFF),
-  val skidAddress: AddressSet = AddressSet(0x200, 0xFF),
-  val mstAddress: Seq[AddressSet] = Seq(AddressSet(0x0, BigInt("FF" * 4, 16))),
+  val csrAddress: AddressSet = AddressSet(0x79040000L, 0xFF),
+  val alignAddress: AddressSet = AddressSet(0x79040100L, 0xFF),
+  val skidAddress: AddressSet = AddressSet(0x79040200L, 0xFF),
+  val streamOutMuxAddress: AddressSet = AddressSet(0x79040300L, 0xFF),
+  val mstAddress: AddressSet = AddressSet(0x0, 0x3FFFFFFFL),
+  val ramAddress: AddressSet = AddressSet(0x79044000L, 0x3FFF),
 ) extends LazyModule()(Parameters.empty) {
   val beatBytes = 4
   val sAxiIsland = LazyModule(new CrossingWrapper(AsynchronousCrossing(safe=true)) with HasAXI4StreamCrossing)
@@ -29,7 +31,7 @@ class Baseband(
     "baseband",
   )))))
   val axiSlaveNode = AXI4SlaveNode(Seq(AXI4SlavePortParameters(Seq(AXI4SlaveParameters(
-    address = mstAddress,
+    address = mstAddress.subtract(ramAddress),
     supportsWrite = TransferSizes(4, 512),
     supportsRead = TransferSizes(4, 512),
   )), beatBytes = beatBytes)))
@@ -40,6 +42,9 @@ class Baseband(
   val (alignerStream, alignerAXI) = StreamAligner(addressSet = alignAddress, beatBytes = beatBytes)
   val xbar = sAxiIsland { AXI4Xbar() }
 
+  val gold = GoldSequence(n = beatBytes)
+  val streamOutMux = StreamMux(streamOutMuxAddress, beatBytes = beatBytes)
+
   sAxiIsland.crossAXI4StreamIn(dma.streamNode := skidStream) :=
     // AXI4StreamBuffer() :=
     alignerStream :=
@@ -48,15 +53,27 @@ class Baseband(
 
   streamNodeSlave :=
     AXI4StreamBuffer() :=
-    sAxiIsland.crossAXI4StreamOut(dma.streamNode)
+    streamOutMux.streamNode
+    //sAxiIsland.crossAXI4StreamOut(dma.streamNode)
+  streamOutMux.streamNode := sAxiIsland.crossAXI4StreamOut(dma.streamNode)
+  streamOutMux.streamNode := gold
 
   alignerAXI := sAxiIsland.crossAXI4Out(xbar)
+  streamOutMux.axiNode := sAxiIsland.crossAXI4Out(xbar)
   sAxiIsland {
     intSink := skidIntSource
     dma.axiSlaveNode := xbar
     skidMem := xbar
     xbar := axiMasterNode
-    axiSlaveNode := dma.axiMasterNode
+    val ramXbar = AXI4Xbar()
+    val masterXbar = AXI4Xbar()
+    axiSlaveNode := masterXbar
+    ramXbar := masterXbar
+    masterXbar := dma.axiMasterNode
+    AXI4RAM(ramAddress, beatBytes = beatBytes) :=
+      AXI4Fragmenter() :=
+      ramXbar
+    ramXbar := xbar
   }
 
   lazy val module = new LazyModuleImp(this) {
@@ -194,7 +211,9 @@ class Baseband(
     streamIn.bits.id := 0.U
     streamIn.bits.keep := 0.U
 
-    streamOut.ready := true.B
+    val dac_i0_ready = dac_valid_i0 && dac_enable_i0
+    val dac_q0_ready = dac_valid_q0 && dac_enable_q0
+    streamOut.ready := dac_i0_ready || dac_q0_ready // true.B
     dac_data_i0 := streamOut.bits.data(15, 0)
     dac_data_q0 := streamOut.bits.data(31, 16)
 
