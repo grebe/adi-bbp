@@ -28,6 +28,9 @@ if { [file exists baseband.srcs/sources_1/bd/test_bd/test_bd.bd] != 1 } {
   # create axi4-stream master vip
   create_bd_cell -type ip -vlnv xilinx.com:ip:axi4stream_vip:1.1 axi4stream_vip_master
   set_property -dict [list CONFIG.INTERFACE_MODE {MASTER} CONFIG.TDATA_NUM_BYTES {4}] [get_bd_cells axi4stream_vip_master]
+
+  create_bd_cell -type ip -vlnv xilinx.com:ip:axi4stream_vip:1.1 axi4stream_vip_slave
+  set_property -dict [list CONFIG.INTERFACE_MODE {SLAVE} CONFIG.TDATA_NUM_BYTES {4}] [get_bd_cells axi4stream_vip_slave]
   
   # create slice to split axi4-stream master into i and q
   create_bd_cell -type ip -vlnv xilinx.com:ip:xlslice:1.0 xlslice_0
@@ -41,6 +44,16 @@ if { [file exists baseband.srcs/sources_1/bd/test_bd/test_bd.bd] != 1 } {
   connect_bd_net [get_bd_pins xlslice_0/Dout] [get_bd_pins Baseband_0/adc_data_i0]
   connect_bd_net [get_bd_pins xlslice_1/Dout] [get_bd_pins Baseband_0/adc_data_q0]
 
+  # create concat to join i and q for axi4-stream slave
+  create_bd_cell -type ip -vlnv xilinx.com:ip:xlconcat:2.1 xlconcat_0
+  set_property -dict [list CONFIG.IN0_WIDTH {16} CONFIG.IN1_WIDTH {16}] [get_bd_cells xlconcat_0]
+  connect_bd_net [get_bd_pins xlconcat_0/In0] [get_bd_pins Baseband_0/dac_data_i0]
+  connect_bd_net [get_bd_pins xlconcat_0/In1] [get_bd_pins Baseband_0/dac_data_q0]
+  connect_bd_net [get_bd_pins xlconcat_0/dout] [get_bd_pins axi4stream_vip_slave/s_axis_tdata]
+  connect_bd_net [get_bd_pins axi4stream_vip_slave/s_axis_tready] [get_bd_pins Baseband_0/dac_valid_i0]
+  connect_bd_net [get_bd_pins axi4stream_vip_slave/s_axis_tready] [get_bd_pins Baseband_0/dac_valid_q0]
+  connect_bd_net [get_bd_pins axi4stream_vip_slave/s_axis_tvalid] [get_bd_pins Baseband_0/dma_valid_i0]
+
   # connect valid to vip
   connect_bd_net [get_bd_pins axi4stream_vip_master/m_axis_tvalid] [get_bd_pins Baseband_0/adc_valid_i0]
   connect_bd_net [get_bd_pins axi4stream_vip_master/m_axis_tvalid] [get_bd_pins Baseband_0/adc_valid_q0]
@@ -52,18 +65,20 @@ if { [file exists baseband.srcs/sources_1/bd/test_bd/test_bd.bd] != 1 } {
 
   # connect axi slave vip to master
   connect_bd_intf_net [get_bd_intf_pins axi_vip_slave/S_AXI] [get_bd_intf_pins Baseband_0/m_axi]
+
+  # enable i0 and q0
+  connect_bd_net [get_bd_pins Baseband_0/dac_enable_i0] [get_bd_pins xlconstant_1/dout]
+  connect_bd_net [get_bd_pins Baseband_0/dac_enable_q0] [get_bd_pins xlconstant_1/dout]
   
   # connect everything else to constant 0
   connect_bd_net [get_bd_pins Baseband_0/adc_valid_i1] [get_bd_pins xlconstant_0/dout]
   connect_bd_net [get_bd_pins Baseband_0/adc_data_i1] [get_bd_pins xlconstant_0/dout]
   connect_bd_net [get_bd_pins Baseband_0/adc_valid_q1] [get_bd_pins xlconstant_0/dout]
   connect_bd_net [get_bd_pins Baseband_0/adc_data_q1] [get_bd_pins xlconstant_0/dout]
-  connect_bd_net [get_bd_pins Baseband_0/dac_valid_i0] [get_bd_pins xlconstant_0/dout]
-  connect_bd_net [get_bd_pins Baseband_0/dac_enable_i0] [get_bd_pins xlconstant_0/dout]
-  connect_bd_net [get_bd_pins Baseband_0/dac_valid_q0] [get_bd_pins xlconstant_0/dout]
+  # connect_bd_net [get_bd_pins Baseband_0/dac_valid_i0] [get_bd_pins xlconstant_0/dout]
+  # connect_bd_net [get_bd_pins Baseband_0/dac_valid_q0] [get_bd_pins xlconstant_0/dout]
   connect_bd_net [get_bd_pins Baseband_0/dac_enable_i1] [get_bd_pins xlconstant_0/dout]
   connect_bd_net [get_bd_pins Baseband_0/dac_valid_i1] [get_bd_pins xlconstant_0/dout]
-  connect_bd_net [get_bd_pins Baseband_0/dac_enable_q0] [get_bd_pins xlconstant_0/dout]
   connect_bd_net [get_bd_pins Baseband_0/dac_valid_q1] [get_bd_pins xlconstant_0/dout]
   connect_bd_net [get_bd_pins Baseband_0/dac_enable_q1] [get_bd_pins xlconstant_0/dout]
   connect_bd_net [get_bd_pins Baseband_0/dma_data_i0] [get_bd_pins xlconstant_0/dout]
@@ -91,11 +106,13 @@ if { [file exists baseband.srcs/sources_1/bd/test_bd/test_bd.bd] != 1 } {
   connect_bd_net [get_bd_ports clock]    [get_bd_pins axi_vip_slave/aclk]
   connect_bd_net [get_bd_ports clock]    [get_bd_pins Baseband_0/s_axi_aclk]
   connect_bd_net [get_bd_ports rx_clock] [get_bd_pins axi4stream_vip_master/aclk]
+  connect_bd_net [get_bd_ports rx_clock] [get_bd_pins axi4stream_vip_slave/aclk]
   connect_bd_net [get_bd_ports rx_clock] [get_bd_pins Baseband_0/clock]
   connect_bd_net [get_bd_ports aresetn]  [get_bd_pins axi_vip_master/aresetn]
   connect_bd_net [get_bd_ports aresetn]  [get_bd_pins axi_vip_slave/aresetn]
   connect_bd_net [get_bd_ports aresetn]  [get_bd_pins Baseband_0/s_axi_aresetn]
   connect_bd_net [get_bd_ports resetn]   [get_bd_pins axi4stream_vip_master/aresetn]
+  connect_bd_net [get_bd_ports resetn]   [get_bd_pins axi4stream_vip_slave/aresetn]
   connect_bd_net [get_bd_ports reset]    [get_bd_pins Baseband_0/reset]
   
   assign_bd_address -external -offset 0x79400000 -range 64K [get_bd_addr_segs {Baseband_0/m_axi/reg0 }]

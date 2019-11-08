@@ -5,7 +5,7 @@ create_project baseband . -force
 ## add files
 set ip_constr_files ""
 set proj_fileset [get_filesets sources_1]
-add_files -norecurse -scan_for_includes -fileset $proj_fileset "AsyncResetReg.v" "Baseband.v" "baseband.xdc"
+add_files -norecurse -scan_for_includes -fileset $proj_fileset "AsyncResetReg.v" "circularTable16.v" "Baseband.v" "NCOTableLUT.v" "NCOTableLUT_1.v" "baseband.xdc"
 set_property "top" "Baseband" $proj_fileset
 
 # make ip
