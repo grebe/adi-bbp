@@ -1,13 +1,15 @@
 package baseband
 
 import chisel3._
+import chisel3.experimental.FixedPoint
+import dsptools.numbers._
 import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.amba.axi4stream._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.interrupts.{IntSinkNode, IntSinkParameters, IntSinkPortParameters}
+import freechips.rocketchip.interrupts.{IntSinkNode, IntSinkParameters, IntSinkPortParameters, IntXbar}
 import freechips.rocketchip.subsystem.CrossingWrapper
-import ofdm.AXI4SkidBuffer
+import ofdm._
 
 class Baseband(
   val adcWidth: Int = 16,
@@ -20,12 +22,43 @@ class Baseband(
   val ramAddress: AddressSet = AddressSet(0x79044000L, 0x3FFF),
 ) extends LazyModule()(Parameters.empty) {
   val beatBytes = 4
+  val protoIn = DspComplex(FixedPoint(16.W, 14.BP), FixedPoint(16.W, 14.BP))
+  val rxParams = RXParams(
+    protoADC = protoIn,
+    protoAngle = FixedPoint(20.W, 17.BP),
+    // protoFFTIn = DspComplex(FixedPoint(20.W, 14.BP), FixedPoint(20.W, 14.BP)),
+    protoFFTIn = DspComplex(FixedPoint(16.W, 10.BP), FixedPoint(16.W, 10.BP)),
+    protoTwiddle = DspComplex(FixedPoint(20.W, 14.BP), FixedPoint(20.W, 14.BP)),
+    protoLLR = FixedPoint(6.W, 2.BP),
+    maxNumPeaks = 5,
+    timeStampWidth = 32,
+    nFFT = 64,
+    autocorrParams = AutocorrParams(
+      protoIn = protoIn,
+      maxApart = 256,
+      maxOverlap = 256,
+    ),
+    ncoParams = NCOParams(
+      phaseWidth = 16,
+      tableSize = 64,
+      phaseConv = u => u.asTypeOf(FixedPoint(20.W, 17.BP)),
+      protoFreq = FixedPoint(16.W, 8.BP),
+      protoOut = FixedPoint(16.W, 14.BP),
+    ),
+  )
   val sAxiIsland = LazyModule(new CrossingWrapper(AsynchronousCrossing(safe=true)) with HasAXI4StreamCrossing)
 
   val dma = sAxiIsland { LazyModule(new StreamingAXI4DMAWithCSR(csrAddress = csrAddress, beatBytes = beatBytes)) }
+  val timeRx = sAxiIsland { LazyModule(new AXI4TimeDomainRXBlock(rxParams, AddressSet(0x400, 0x3FF))) }
+  val freqRx = sAxiIsland { LazyModule(new AXI4FreqDomainRXBlock(rxParams)) }
+  val (inputStreamMux, inputStreamMuxMem) = sAxiIsland { StreamMux.axi(AddressSet(0x300, 0xFF), beatBytes = 4) }
+  val splitter = sAxiIsland { SimpleSplitter() }
 
   val (skidStream, skidMem, skidIntSource) = sAxiIsland { AXI4SkidBuffer(skidAddress, depth = 512, beatBytes = 4) }
-  val intSink = IntSinkNode(Seq(IntSinkPortParameters(Seq(IntSinkParameters()))))
+  val intSink =
+    IntSinkNode(Seq(IntSinkPortParameters(Seq(IntSinkParameters()))))
+    // sAxiIsland { IntSinkNode(Seq(IntSinkPortParameters(Seq(IntSinkParameters())))) }
+  val intXbar = sAxiIsland { IntXbar(Parameters.empty) }
 
   val axiMasterNode = AXI4MasterNode(Seq(AXI4MasterPortParameters(Seq(AXI4MasterParameters(
     "baseband",
@@ -42,14 +75,18 @@ class Baseband(
   val (alignerStream, alignerAXI) = StreamAligner(addressSet = alignAddress, beatBytes = beatBytes)
   val xbar = sAxiIsland { AXI4Xbar() }
 
-  val gold = GoldSequence(n = beatBytes)
-  val streamOutMux = StreamMux(streamOutMuxAddress, beatBytes = beatBytes)
+  // val gold = GoldSequence(n = beatBytes)
+  // val streamOutMux = StreamMux(streamOutMuxAddress, beatBytes = beatBytes)
 
-  sAxiIsland.crossAXI4StreamIn(dma.streamNode := skidStream) :=
+  // sAxiIsland.crossAXI4StreamIn(dma.streamNode := skidStream) :=
+  // sAxiIsland.crossAXI4StreamIn(dma.streamNode := skidStream) :=
+  sAxiIsland.crossAXI4StreamIn(splitter) :=
     // AXI4StreamBuffer() :=
     alignerStream :=
     // AXI4StreamBuffer() :=
     streamNodeMaster
+  //inputStreamMux := streamNodeMaster
+  //inputStreamMux := freqRx.streamNode := timeRx.streamNode
 
   streamNodeSlave :=
     AXI4StreamBuffer() :=
@@ -61,9 +98,32 @@ class Baseband(
   alignerAXI := sAxiIsland.crossAXI4Out(xbar)
   streamOutMux.axiNode := sAxiIsland.crossAXI4Out(xbar)
   sAxiIsland {
-    intSink := skidIntSource
+    val scheduler = LazyModule(new AXI4_StreamScheduler(
+      AddressSet(0x800, 0xFF),
+      beatBytes = 4,
+      counterOpt = None // Some(timeRx.module.rx.globalCycleCounter)
+    ))
+    scheduler.mem.get := xbar
+    scheduler.hardCoded := timeRx.schedule
+
+    dma.streamNode := inputStreamMux
+    inputStreamMux :=
+      AXI4StreamWidthAdapter.oneToN(4) :=
+      // AXI4StreamWidthAdapter.nToOne(13) :=
+      // AXI4StreamWidthAdapter.oneToN(5) :=
+      // AXI4StreamWidthAdapter.nToOne(4) :=
+      freqRx.streamNode :=
+      scheduler.streamNode :=
+      timeRx.streamNode :=
+      splitter
+    intSink := intXbar
+    intXbar := timeRx.intnode
+    inputStreamMux := skidStream := splitter
+    intXbar := skidIntSource
     dma.axiSlaveNode := xbar
     skidMem := xbar
+    timeRx.mem.get := xbar
+    inputStreamMuxMem := xbar
     xbar := axiMasterNode
     val ramXbar = AXI4Xbar()
     val masterXbar = AXI4Xbar()
@@ -196,7 +256,7 @@ class Baseband(
     val s_axi_rresp = IO(Output(UInt(2.W)))
     val s_axi_rready = IO(Input(Bool()))
 
-    val skid_ints = IO(Output(Vec(2, Bool())))
+    val skid_ints = IO(Output(Vec(intOut.length, Bool())))
     skid_ints := intOut
 
     val axireset = WireInit(!s_axi_aresetn.asBool)
