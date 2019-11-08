@@ -54,8 +54,10 @@ M_FLIST += *.ltx
 M_FLIST += .Xil
 
 .PHONY: all lib clean clean-all
-all: lib zc706.sdk/system_top.hdf
+all: lib ../../ip/baseband.xpr zc706.sdk/system_top.hdf
 
+../../ip/baseband.xpr:
+	make -C ../../ip/
 # clean: 
 # 	rm -rf $(M_FLIST)
 # 

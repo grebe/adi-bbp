@@ -40,13 +40,13 @@ make_targets zc706.srcs/sources_1
 
 project_run_synth zc706
 
-set_property DONT_TOUCH true [get_nets -hier -regexp .*/axi_hp3_interconnect/S00_AXI_.*]
-set_property mark_debug true [get_nets -hier -regexp .*/axi_hp3_interconnect/S00_AXI_.*]
-set_property DONT_TOUCH true [get_nets -hier -regexp .*/axi_hp3_interconnect/M00_AXI_.*]
-set_property mark_debug true [get_nets -hier -regexp .*/axi_hp3_interconnect/M00_AXI_.*]
+# set_property DONT_TOUCH true [get_nets -hier -regexp .*/axi_hp3_interconnect/S00_AXI_.*]
+# set_property mark_debug true [get_nets -hier -regexp .*/axi_hp3_interconnect/S00_AXI_.*]
+# set_property DONT_TOUCH true [get_nets -hier -regexp .*/axi_hp3_interconnect/M00_AXI_.*]
+# set_property mark_debug true [get_nets -hier -regexp .*/axi_hp3_interconnect/M00_AXI_.*]
 
-add_ila
-place_ila
+# add_ila
+# place_ila
 
 project_run_impl zc706
 
