@@ -2,6 +2,7 @@ package baseband
 
 import chisel3._
 import chisel3.experimental.FixedPoint
+import dsptools.DspContext
 import dsptools.numbers._
 import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.amba.axi4stream._
@@ -46,13 +47,19 @@ class Baseband(
       protoOut = FixedPoint(16.W, 14.BP),
     ),
   )
-  val sAxiIsland = LazyModule(new CrossingWrapper(AsynchronousCrossing(safe=true)) with HasAXI4StreamCrossing)
+  val context = DspContext.current.copy(
+    numAddPipes = 1,
+    numMulPipes = 3,
+  )
 
+  val sAxiIsland = LazyModule(new CrossingWrapper(AsynchronousCrossing(safe=true)) with HasAXI4StreamCrossing)
   val dma = sAxiIsland { LazyModule(new StreamingAXI4DMAWithCSR(csrAddress = csrAddress, beatBytes = beatBytes)) }
   val timeRx = sAxiIsland { LazyModule(new AXI4TimeDomainRXBlock(rxParams, AddressSet(0x400, 0x3FF))) }
-  val freqRx = sAxiIsland { LazyModule(new AXI4FreqDomainRXBlock(rxParams)) }
+  val freqRx = DspContext.alter(context) {
+    sAxiIsland { LazyModule(new AXI4FreqDomainRXBlock(rxParams)) }
+  }
   val (inputStreamMux, inputStreamMuxMem) = sAxiIsland { StreamMux.axi(AddressSet(0x300, 0xFF), beatBytes = 4) }
-  val splitter = sAxiIsland { SimpleSplitter() }
+  val (splitter, splitterMem) = sAxiIsland { StreamMux.axi(AddressSet(0x900, 0xFF), beatBytes = 4) }
 
   val (skidStream, skidMem, skidIntSource) = sAxiIsland { AXI4SkidBuffer(skidAddress, depth = 512, beatBytes = 4) }
   val intSink =
@@ -90,13 +97,13 @@ class Baseband(
 
   streamNodeSlave :=
     AXI4StreamBuffer() :=
-    streamOutMux.streamNode
-    //sAxiIsland.crossAXI4StreamOut(dma.streamNode)
-  streamOutMux.streamNode := sAxiIsland.crossAXI4StreamOut(dma.streamNode)
-  streamOutMux.streamNode := gold
+    // streamOutMux.streamNode
+    sAxiIsland.crossAXI4StreamOut(dma.streamNode)
+  // streamOutMux.streamNode := sAxiIsland.crossAXI4StreamOut(dma.streamNode)
+  // streamOutMux.streamNode := gold
 
   alignerAXI := sAxiIsland.crossAXI4Out(xbar)
-  streamOutMux.axiNode := sAxiIsland.crossAXI4Out(xbar)
+  // streamOutMux.axiNode := sAxiIsland.crossAXI4Out(xbar)
   sAxiIsland {
     val scheduler = LazyModule(new AXI4_StreamScheduler(
       AddressSet(0x800, 0xFF),
@@ -124,6 +131,7 @@ class Baseband(
     skidMem := xbar
     timeRx.mem.get := xbar
     inputStreamMuxMem := xbar
+    splitterMem := xbar
     xbar := axiMasterNode
     val ramXbar = AXI4Xbar()
     val masterXbar = AXI4Xbar()
@@ -136,11 +144,7 @@ class Baseband(
     ramXbar := xbar
   }
 
-  lazy val module = new LazyModuleImp(this) {
-    // val clock = IO(Input(Clock()))
-    // val reset = IO(Input(Reset()))
-    // childClock := clock
-    // childReset := reset
+  lazy val module = DspContext.alter(context) { new LazyModuleImp(this) {
     val axiSlave = axiMasterNode.out.head._1
     val axiMaster = axiSlaveNode.in.head._1
     val streamIn = streamNodeMaster.out.head._1
@@ -148,50 +152,42 @@ class Baseband(
     val intOut = intSink.in.head._1
 
     // adc inputs
-    val adc_valid_i0 = IO(Input(Bool()))
-    // val adc_en_i0 = IO(Input(Bool()))
-    val adc_data_i0 = IO(Input(UInt(adcWidth.W)))
-    val adc_valid_q0 = IO(Input(Bool()))
-    // val adc_en_q0 = IO(Input(Bool()))
-    val adc_data_q0 = IO(Input(UInt(adcWidth.W)))
-    val adc_valid_i1 = IO(Input(Bool()))
-    // val adc_en_i1 = IO(Input(Bool()))
-    val adc_data_i1 = IO(Input(UInt(adcWidth.W)))
-    val adc_valid_q1 = IO(Input(Bool()))
-    // val adc_en_q1 = IO(Input(Bool()))
-    val adc_data_q1 = IO(Input(UInt(adcWidth.W)))
+    val adc_0_valid = IO(Input(Bool()))
+    // I and Q concatenated
+    val adc_0_data = IO(Input(UInt((2 * adcWidth).W)))
+    val adc_0_ready = IO(Output(Bool()))
+    // each bit indicates if I and/or Q is enabled
+    val adc_0_user = IO(Input(UInt(2.W)))
+    val adc_1_valid = IO(Input(Bool()))
+    // I and Q concatenated
+    val adc_1_data = IO(Input(UInt((2 * adcWidth).W)))
+    val adc_1_ready = IO(Output(Bool()))
+    // each bit indicates if I and/or Q is enabled
+    val adc_1_user = IO(Input(UInt(2.W)))
 
     // dac outputs
-    val dac_valid_i0 = IO(Input(Bool()))
-    val dac_enable_i0 = IO(Input(Bool()))
-    val dac_data_i0 = IO(Output(UInt(dacWidth.W)))
-    val dac_valid_q0 = IO(Input(Bool()))
-    val dac_enable_i1 = IO(Input(Bool()))
-    val dac_data_q0 = IO(Output(UInt(dacWidth.W)))
-    val dac_valid_i1 = IO(Input(Bool()))
-    val dac_enable_q0 = IO(Input(Bool()))
-    val dac_data_i1 = IO(Output(UInt(dacWidth.W)))
-    val dac_valid_q1 = IO(Input(Bool()))
-    val dac_enable_q1 = IO(Input(Bool()))
-    val dac_data_q1 = IO(Output(UInt(dacWidth.W)))
+    val dac_0_valid = IO(Output(Bool()))
+    val dac_0_ready = IO(Input(Bool()))
+    val dac_0_data  = IO(Output(UInt((2 * dacWidth).W)))
+    // each bit indicates if I and/or Q is enabled
+    val dac_0_user  = IO(Output(UInt(2.W)))
+    val dac_1_valid = IO(Output(Bool()))
+    val dac_1_ready = IO(Input(Bool()))
+    val dac_1_data  = IO(Output(UInt((2 * dacWidth).W)))
+    // each bit indicates if I and/or Q is enabled
+    val dac_1_user  = IO(Output(UInt(2.W)))
 
     // dma -> dac IOs
-    val dma_valid_i0 = IO(Output(Bool()))
-    val dma_enable_i0 = IO(Output(Bool()))
-    val dma_data_i0 = IO(Input(UInt(dacWidth.W)))
-    val dma_valid_out_i0 = IO(Input(Bool()))
-    val dma_valid_i1 = IO(Output(Bool()))
-    val dma_enable_i1 = IO(Output(Bool()))
-    val dma_data_i1 = IO(Input(UInt(dacWidth.W)))
-    val dma_valid_out_i1 = IO(Input(Bool()))
-    val dma_valid_q0 = IO(Output(Bool()))
-    val dma_enable_q0 = IO(Output(Bool()))
-    val dma_data_q0 = IO(Input(UInt(dacWidth.W)))
-    val dma_valid_out_q0 = IO(Input(Bool()))
-    val dma_valid_q1 = IO(Output(Bool()))
-    val dma_enable_q1 = IO(Output(Bool()))
-    val dma_data_q1 = IO(Input(UInt(dacWidth.W)))
-    val dma_valid_out_q1 = IO(Input(Bool()))
+    val dma_0_ready = IO(Output(Bool()))
+    val dma_0_valid = IO(Input(Bool()))
+    val dma_0_data = IO(Input(UInt((2 * dacWidth).W)))
+    // each bit indicates if I and/or Q is enabled
+    val dma_0_user = IO(Input(UInt(2.W)))
+    val dma_1_ready = IO(Output(Bool()))
+    val dma_1_valid = IO(Input(Bool()))
+    val dma_1_data = IO(Input(UInt((2 * dacWidth).W)))
+    // each bit indicates if I and/or Q is enabled
+    val dma_1_user = IO(Input(UInt(2.W)))
 
     val dma_dunf = IO(Input(Bool()))
     val dac_dunf = IO(Output(Bool()))
@@ -231,6 +227,7 @@ class Baseband(
     val m_axi_rid = IO(Input(Bool()))
     val m_axi_rdata = IO(Input(UInt((beatBytes * 8).W)))
     val m_axi_rresp = IO(Input(UInt(2.W)))
+    val m_axi_rlast = IO(Input(Bool()))
     val m_axi_rready = IO(Output(Bool()))
 
     // axi slave interface
@@ -264,32 +261,28 @@ class Baseband(
     sAxiIsland.module.clock := s_axi_aclk
     sAxiIsland.module.reset := axireset // !s_axi_aresetn
 
-    streamIn.valid := adc_valid_i0 && adc_valid_q0
-    streamIn.bits.data := util.Cat(adc_data_i0, adc_data_q0)
+    adc_0_ready := streamIn.ready
+    streamIn.valid := adc_0_valid
+    streamIn.bits.data := adc_0_data
+    streamIn.bits.user := adc_0_user
     streamIn.bits.last := false.B
     streamIn.bits.dest := 0.U
     streamIn.bits.id := 0.U
     streamIn.bits.keep := 0.U
 
-    val dac_i0_ready = dac_valid_i0 && dac_enable_i0
-    val dac_q0_ready = dac_valid_q0 && dac_enable_q0
-    streamOut.ready := dac_i0_ready || dac_q0_ready // true.B
-    dac_data_i0 := streamOut.bits.data(15, 0)
-    dac_data_q0 := streamOut.bits.data(31, 16)
+    adc_1_ready := false.B // TODO
 
-    dac_data_i1 := dma_data_i1
-    dac_data_q1 := dma_data_q1
+    streamOut.ready := dac_0_ready
+    dac_0_data := streamOut.bits.data
+    dac_0_user := streamOut.bits.user
+    dac_0_valid := streamOut.valid
 
-    dma_valid_i0 := streamOut.valid
-    dma_valid_q0 := streamOut.valid
+    dma_0_ready := true.B
 
-    dma_valid_i1 := dma_valid_out_i1
-    dma_valid_q1 := dma_valid_out_q1
-
-    dma_enable_i0 := dac_enable_i0
-    dma_enable_q0 := dac_enable_q0
-    dma_enable_i1 := dac_enable_i1
-    dma_enable_q1 := dac_enable_q1
+    dma_1_ready := dac_1_ready
+    dac_1_data := dma_1_data
+    dac_1_user := dma_1_user
+    dac_1_valid := dma_1_valid
 
     dac_dunf := dma_dunf
 
@@ -332,6 +325,7 @@ class Baseband(
     axiMaster.r.bits.id := m_axi_rid
     axiMaster.r.bits.data := m_axi_rdata
     axiMaster.r.bits.resp := m_axi_rresp
+    axiMaster.r.bits.last := m_axi_rlast
     m_axi_rready := axiMaster.r.ready
 
     axiSlave.aw.valid := s_axi_awvalid
@@ -370,5 +364,5 @@ class Baseband(
     s_axi_rdata := axiSlave.r.bits.data
     s_axi_rresp := axiSlave.r.bits.resp
     axiSlave.r.ready := s_axi_rready
-  }
+  } }
 }

@@ -40,6 +40,19 @@ make_targets zc706.srcs/sources_1
 
 project_run_synth zc706
 
+create_pblock pblock_freqRx
+add_cells_to_pblock pblock_freqRx [get_cells -hier -regexp .*/baseband/inst/sAxiIsland/freqRx/freqRx] -clear_locs
+
+create_pblock pblock_timeRx
+add_cells_to_pblock pblock_timeRx [get_cells -hier -regexp .*/baseband/inst/sAxiIsland/timeRx/rx] -clear_locs
+
+create_pblock pblock_baseband_crossings
+add_cells_to_pblock pblock_baseband_crossings [get_cells -hier -regexp .*/baseband/inst/.*/AsyncQueueS.*] -clear_locs
+add_cells_to_pblock pblock_baseband_crossings [get_cells -hier -regexp .*/baseband/inst/sAxiIsland/.*/AsyncQueueS.*] -clear_locs
+
+place_pblocks -effort HIGH -utilization 45 [get_pblocks [list pblock_freqRx pblock_timeRx pblock_baseband_crossings]]
+
+
 # set_property DONT_TOUCH true [get_nets -hier -regexp .*/axi_hp3_interconnect/S00_AXI_.*]
 # set_property mark_debug true [get_nets -hier -regexp .*/axi_hp3_interconnect/S00_AXI_.*]
 # set_property DONT_TOUCH true [get_nets -hier -regexp .*/axi_hp3_interconnect/M00_AXI_.*]

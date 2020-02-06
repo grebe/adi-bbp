@@ -8,6 +8,7 @@
 *.log
 *.ltx
 *.sdk/
+*.tar.gz
 .idea/
 out/
 project/
