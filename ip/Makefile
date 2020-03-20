@@ -1,8 +1,8 @@
 M_DIR := $(shell pwd)
 CHISEL_DIR := $(shell pwd)/../
+IVYS := $(shell find ~/.ivy2/local/ -name *.jar)
 CHISEL_SRCS := \
-	$(CHISEL_DIR)/src/main/scala/baseband/Baseband.scala \
-	$(CHISEL_DIR)/src/main/scala/baseband/App.scala
+	$(shell find ../src -name *.scala) $(IVYS)
 
 export ADI_HDL_DIR := $(M_DIR)/../hdl
 export ADI_PHDL_DIR := $(M_DIR)/../hdl
@@ -49,7 +49,8 @@ xilinx: baseband.xpr
 -include Makefrag.mill
 
 Baseband.v: $(CHISEL_SRCS)
-	cd $(CHISEL_DIR) && sbt "run -td $(M_DIR)"
+	cd $(CHISEL_DIR) && sbt "run -td $(M_DIR) -foaf Baseband.anno.json -X low"
+	cd $(CHISEL_DIR) && sbt "run -td $(M_DIR) -foaf Baseband.anno.json -X verilog"
 
 Baseband.fir: $(CHISEL_SRCS)
 	cd $(CHISEL_DIR) && sbt "run -td $(M_DIR) -X low -ll trace --full-stacktrace" 

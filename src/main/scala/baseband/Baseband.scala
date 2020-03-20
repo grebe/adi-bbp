@@ -31,7 +31,7 @@ class Baseband(
     protoFFTIn = DspComplex(FixedPoint(16.W, 10.BP), FixedPoint(16.W, 10.BP)),
     protoTwiddle = DspComplex(FixedPoint(20.W, 14.BP), FixedPoint(20.W, 14.BP)),
     protoLLR = FixedPoint(6.W, 2.BP),
-    maxNumPeaks = 5,
+    maxNumPeaks = 256,
     timeStampWidth = 32,
     nFFT = 64,
     autocorrParams = AutocorrParams(
@@ -105,13 +105,13 @@ class Baseband(
   alignerAXI := sAxiIsland.crossAXI4Out(xbar)
   // streamOutMux.axiNode := sAxiIsland.crossAXI4Out(xbar)
   sAxiIsland {
-    val scheduler = LazyModule(new AXI4_StreamScheduler(
-      AddressSet(0x800, 0xFF),
-      beatBytes = 4,
-      counterOpt = None // Some(timeRx.module.rx.globalCycleCounter)
-    ))
-    scheduler.mem.get := xbar
-    scheduler.hardCoded := timeRx.schedule
+    // val scheduler = LazyModule(new AXI4_StreamScheduler(
+    //   AddressSet(0x800, 0xFF),
+    //   beatBytes = 4,
+    //   counterOpt = None // Some(timeRx.module.rx.globalCycleCounter)
+    // ))
+    // scheduler.mem.get := xbar
+    // scheduler.hardCoded := timeRx.schedule
 
     dma.streamNode := inputStreamMux
     inputStreamMux :=
@@ -120,7 +120,7 @@ class Baseband(
       // AXI4StreamWidthAdapter.oneToN(5) :=
       // AXI4StreamWidthAdapter.nToOne(4) :=
       freqRx.streamNode :=
-      scheduler.streamNode :=
+      // scheduler.streamNode :=
       timeRx.streamNode :=
       splitter
     intSink := intXbar

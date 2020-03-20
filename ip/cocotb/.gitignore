@@ -1,0 +1,14 @@
+*.json
+*.fir
+*.v
+*.vcd
+*.xml
+
+_tx.so
+tx.o
+tx.py
+tx_wrap.c
+
+build/
+__pycache__/
+sim_build/
