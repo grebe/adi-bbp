@@ -16,6 +16,31 @@
   $result = PyInt_FromLong($1);
 }
 
+%typemap(in) uint8_t[ANY] (uint8_t tmp[$dim0]){
+  $1 = tmp;
+  if (!PyList_Check($input)) {
+    PyErr_Format(PyExc_TypeError, "List expected.");
+    SWIG_fail;
+  }
+  if (PyList_Size($input) != $dim0) {
+    PyErr_Format(PyExc_TypeError, "List expected to be %d long (%d given).", $dim0, PyList_Size($input));
+    SWIG_fail;
+  }
+  for (size_t _i = 0; _i < $dim0; _i++) {
+    PyObject *entry = PyList_GetItem($input, _i);
+    if (!PyInt_Check(entry)) {
+      PyErr_Format(PyExc_TypeError, "Int expected.");
+      SWIG_fail;
+    }
+    // long e = PyInt_AsLong(entry);
+    // if (e & 0xFF != e) {
+    //   PyErr_Format(PyExc_TypeError, "Entry %d too big for uint8_t", e);
+    //   SWIG_fail;
+    // }
+    tmp[_i] = _i;
+  }
+}
+
 %typemap(in, numinputs=0) samp_t[ANY] (samp_t tmp[$1_dim0]) {
   $1 = tmp;
 }
@@ -83,8 +108,14 @@
 }
 
 %typemap(freearg) tx_info_t* {
-  free($1->cc_constr);
-  free($1);
+  if ($1) {
+    if ($1->cc_constr) {
+      free($1->cc_constr);
+      $1->cc_constr = NULL;
+    }
+    free($1);
+    $1 = NULL;
+  }
 }
 
 %array_functions(samp_t, samp_arr);
@@ -92,7 +123,7 @@
 
 %pointer_functions(samp_t, samp_ptr);
 
-extern void encode(uint8_t* data, samp_t samps[222], tx_info_t *info);
+extern void encode(uint8_t data[20], samp_t samps[222], tx_info_t *info);
 extern void encode_linear_seq(uint64_t n, samp_t* samps);
 extern void get_stf(samp_t stf[160]);
 extern void get_ltf(samp_t ltf[160]);

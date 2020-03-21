@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -9,10 +10,13 @@ const double samp_mult = 32768.0;
 
 // defines for complex values in preambles
 
+// scaled
+#define pp (sqrt(13.0 / 6.0) / 64.0)
+
 #define c_zero  0.0,  0.0
-#define c_one   1.0,  0.0
-#define c_pp    1.0,  1.0
-#define c_mm   -1.0, -1.0
+#define c_one    pp,  0.0
+#define c_pp     pp,  pp
+#define c_mm   (-pp), (-pp)
 
 const double stf_freq[8*8*2] = {
     c_zero, c_zero, c_zero, c_zero, c_mm,   c_zero, c_zero, c_zero,
@@ -61,12 +65,12 @@ static void tf64_to_packed_160(const double freq[64*2], samp_t out[160], int tim
   size_t i;
   double scratch[64*2];
   double w[32];
-  int ip[10];
+  int ip[16];
   ip[0] = 0;
 
   memcpy(scratch, freq, 64 * 2 * sizeof(double));
 
-  cdft(2 * 64, -1, scratch, ip, w);
+  cdft(2 * 64, 1, scratch, ip, w);
 
   for (i = 0; i < 160; i++) {
     size_t ridx = (i + time_start_idx) % 64;

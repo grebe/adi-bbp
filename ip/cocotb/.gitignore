@@ -1,5 +1,6 @@
 *.json
 *.fir
+*.stamp
 *.v
 *.vcd
 *.xml

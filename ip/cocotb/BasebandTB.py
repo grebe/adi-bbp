@@ -159,7 +159,7 @@ class BasebandTB(object):
     def dma_mm_to_dac(self, *, base = 0, size = None):
         if size is None:
             size = len(self.memory) // 4
-        # base 
+        # base
         yield self.csr.write(self.csrBase + 0x9 * 4, base)
         # length
         yield self.csr.write(self.csrBase + 0xA * 4, size - 1)
@@ -245,7 +245,7 @@ class BasebandTB(object):
         for key in settings.keys():
             kwargs.pop(key, None)
         if len(kwargs) != 0:
-            raise TypeError(f"Unexpected kwargs {kwargs}") 
+            raise TypeError(f"Unexpected kwargs {kwargs}")
 
         for idx, (key, val) in enumerate(settings.items()):
             # print(f"Writing {representations[key](val)} ({val}) to {base + idx * 4}")
@@ -255,9 +255,8 @@ class BasebandTB(object):
 
     @cocotb.coroutine
     def transmit(self, data):
-        # txdata = encode_tx(data)
-        txdata = encode_linear_seq(222)
-        print(txdata)
+        txdata = encode_tx(data, addPreamble = True)
+        # txdata = encode_linear_seq(222)
         self.txdata.extend(data)
 
         for i in range(len(txdata)):
@@ -290,14 +289,11 @@ def encode_linear_seq(n):
     print([hex(i) for i in out])
     return b''.join([i.to_bytes(4, 'little') for i in out])
 
-def encode_tx(data, addPreamble = False):
+def encode_tx(data, *, addPreamble = True):
     out = []
     if addPreamble:
-        out += tx.get_ltf()
-    d = tx.new_uint8_t_arr(160)
-    for i in range(160):
-        tx.uint8_t_arr_setitem(d, i, data[i])
-    out += tx.encode(d, {"src": 2, "dst": 3})
+        out += tx.get_stf()
+    # out += tx.encode(data, {"src": 2, "dst": 3})
     # convert to byte string
     out = b''.join([i.to_bytes(4, 'little') for i in out])
     return out
@@ -338,10 +334,9 @@ def run_test(dut, data_in=None, config_coroutine=None, idle_inserter=None, backp
 
     # get tx packet
     print("STARTING MM -> DAC")
-    # yield tb.dma_mm_to_dac(base = 0, size = 128//4) # * 4)
+    yield tb.transmit([1] * 20)
+
     print("STARTING RX -> MM")
-    # cocotb.fork(tb.transmit([0] * 160))
-    yield tb.transmit([0] * 160)
     rx = cocotb.fork(tb.dma_to_mm(base = 1024 * 4, size = 128//4 - 1))
     timeout = yield ClockCycles(dut.clock, 2000)
 
