@@ -130,7 +130,6 @@ next_out_bits(uint8_t **out,
       *out_bit_pos = 0;
     }
   }
-
 }
 
 /**
@@ -190,6 +189,31 @@ static void cc_encode_tb(
   }
 }
 
+int pilot_compare(const void* e1, const void* e2)
+{
+  pilot_tone *p1 = (pilot_tone*)e1;
+  pilot_tone *p2 = (pilot_tone*)e2;
+  if (p1->pos < p2->pos) {
+    return -1;
+  } else if (p1->pos > p2->pos) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+static inline void map_pilots(
+    uint8_t* __restrict__ in,
+    uint8_t* __restrict__ out,
+    uint64_t n_bytes,
+    uint64_t n_fft,
+    uint8_t num_pilots,
+    pilot_tone *pilots)
+{
+  // TODO
+  memcpy(out, in, n_bytes);
+}
+
 static void
 modulate(uint8_t* __restrict__ in, size_t in_len, double* __restrict__ samps)
 {
@@ -245,6 +269,7 @@ void encode(uint8_t data[20], samp_t samps[222], tx_info_t *info)
   uint32_t i;
   uint8_t frame[24];
   uint8_t encoded[48];
+  uint8_t mapped[48];
   double modulated[192 * 2];
   double w[32];
   int ip[10];
@@ -270,10 +295,11 @@ void encode(uint8_t data[20], samp_t samps[222], tx_info_t *info)
       info->cc_constr, info->cc_length);
 
   // map
-  // no-op (direct mapping)
+  // direct mapping with pilots inserted
+  map_pilots(encoded, mapped, 48, 64, info->num_pilots, info->pilots);
 
   // modulate
-  modulate(encoded, 48, modulated);
+  modulate(mapped, 48, modulated);
 
   // fft
   for (i = 0; i < 3; i++) {
@@ -287,7 +313,7 @@ void encode(uint8_t data[20], samp_t samps[222], tx_info_t *info)
 
 void encode_linear_seq(uint64_t n, samp_t* samps)
 {
-  for (int i = 0; i < n; i++) {
+  for (uint64_t i = 0; i < n; i++) {
     samps[i] = double_to_packed_fixed(i * 1.0 * pow(2.0, -15), i * -1.0 * pow(2.0, -15));
   }
 }

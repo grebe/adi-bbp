@@ -18,13 +18,24 @@ typedef struct {
 } marray;
 
 typedef struct {
+  uint8_t pos;
+  double real;
+  double imag;
+} pilot_tone;
+
+typedef struct {
   uint8_t src;
   uint8_t dst;
   uint16_t time; // TODO necessary?
   uint8_t r0, r1, r2;
   uint8_t cc_length;
   constraint_t *cc_constr;
+  uint8_t num_pilots;
+  // must be in order of increasing pos
+  pilot_tone* pilots;
 } tx_info_t;
+
+int pilot_compare(const void* e1, const void* e2);
 
 extern void encode(uint8_t data[20], samp_t samps[222], tx_info_t *info);
 

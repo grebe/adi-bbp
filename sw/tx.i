@@ -38,6 +38,8 @@
     //   SWIG_fail;
     // }
     tmp[_i] = _i;
+    tmp[_i] = PyInt_AsLong(entry);
+    // Py_DECREF(entry);
   }
 }
 
@@ -48,12 +50,12 @@
 %typemap(argout) samp_t[ANY] {
   $result = PyList_New($1_dim0);
   for (size_t i = 0; i < $1_dim0; i++) {
-    PyList_SetItem($result, i, PyInt_FromLong($1[i]));
+    PyObject *o = PyInt_FromLong($1[i]);
+    PyList_SetItem($result, i, o);
   }
 }
 
 %typemap(in, numinputs=1) (uint64_t n, samp_t* samps) {
-  $1 = $input;
   if (!PyInt_Check($input)) {
     PyErr_Format(PyExc_TypeError, "Int expected. '%s' given.");
     SWIG_fail;
@@ -65,7 +67,8 @@
 %typemap(argout, numinputs=1) (uint64_t n, samp_t* samps) {
   $result = PyList_New($1);
   for (size_t i = 0; i < $1; i++) {
-    PyList_SetItem($result, i, PyInt_FromLong($2[i]));
+    PyObject *o = PyInt_FromLong($2[i]);
+    PyList_SetItem($result, i, o);
   }
 }
 
@@ -75,17 +78,165 @@
 }
 
 %typemap(in) tx_info_t* {
+
   $1 = malloc(sizeof(tx_info_t));
 
+  // check if $input is a dict
+  if (!PyDict_Check($input)) {
+    PyErr_Format(PyExc_TypeError, "Dict expected");
+    SWIG_fail;
+  }
+
   PyObject *key, *item;
+
+  // src (mandatory)
   key = PyString_FromString("src");
-  $1->src = PyInt_AsLong(PyDict_GetItem($input, key));
+  item = PyDict_GetItemWithError($input, key);
+  Py_DECREF(key);
+
+  if (!item) {
+    PyErr_Format(PyExc_TypeError, "Key src not found.");
+    SWIG_fail;
+  }
+  if (!PyInt_Check(item)) {
+    PyErr_Format(PyExc_TypeError, "Key src not an int.");
+    SWIG_fail;
+  }
+  $1->src = PyInt_AsLong(item);
+  // Py_DECREF(item);
+
+  // dst (mandatory)
   key = PyString_FromString("dst");
-  $1->dst = PyInt_AsLong(PyDict_GetItem($input, key));
+  item = PyDict_GetItemWithError($input, key);
+  Py_DECREF(key);
+
+  if (!item) {
+    PyErr_Format(PyExc_TypeError, "Key dst not found.");
+    SWIG_fail;
+  }
+  if (!PyInt_Check(item)) {
+    PyErr_Format(PyExc_TypeError, "Key dst not an int.");
+    SWIG_fail;
+  }
+  $1->dst = PyInt_AsLong(item);
+  // Py_DECREF(item);
+
   $1->time = 0;
-  $1->r0 = 2;
-  $1->r1 = 3;
-  $1->r2 = 4;
+
+  // r0 (optional)
+  key = PyString_FromString("r0");
+  item = PyDict_GetItem($input, key);
+  Py_DECREF(key);
+
+  if (item) {
+    if (!PyInt_Check(item)) {
+      PyErr_Format(PyExc_TypeError, "Key r0 not an int");
+      SWIG_fail;
+    }
+    $1->r0 = PyInt_AsLong(item);
+    // Py_DECREF(item);
+  } else {
+    $1->r0 = 2;
+  }
+
+  // r1 (optional)
+  key = PyString_FromString("r1");
+  item = PyDict_GetItem($input, key);
+  Py_DECREF(key);
+
+  if (item) {
+    if (!PyInt_Check(item)) {
+      PyErr_Format(PyExc_TypeError, "Key r1 not an int");
+      SWIG_fail;
+    }
+    $1->r1 = PyInt_AsLong(item);
+    // Py_DECREF(item);
+  } else {
+    $1->r1 = 3;
+  }
+
+  // r2 (optional)
+  key = PyString_FromString("r2");
+  item = PyDict_GetItem($input, key);
+  Py_DECREF(key);
+
+  if (item) {
+    if (!PyInt_Check(item)) {
+      PyErr_Format(PyExc_TypeError, "Key r2 not an int");
+      SWIG_fail;
+    }
+    $1->r2 = PyInt_AsLong(item);
+    // Py_DECREF(item);
+  } else {
+    $1->r2 = 4;
+  }
+
+  // pilots (optional)
+  key = PyString_FromString("pilots");
+  item = PyDict_GetItem($input, key);
+  Py_DECREF(key);
+
+  if (item) {
+    if (!PyDict_Check(item)) {
+      PyErr_Format(PyExc_TypeError, "Key pilot not a dict");
+      SWIG_fail;
+    }
+    $1->num_pilots = PyDict_Size(item);
+    $1->pilots = malloc($1->num_pilots * sizeof(pilot_tone));
+
+    Py_ssize_t pos = 0;
+
+    PyObject *pilot_idx, *pilot_value;
+    uint64_t _i = 0;
+    while (PyDict_Next(item, &pos, &pilot_idx, &pilot_value)) {
+      if (PyInt_Check(pilot_idx)) {
+        $1->pilots[_i].pos = PyInt_AsLong(pilot_idx);
+      } else {
+        PyErr_Format(PyExc_TypeError, "Key in dict not an int");
+        SWIG_fail;
+      }
+      if (PyInt_Check(pilot_value)) {
+        $1->pilots[_i].real = (double)PyInt_AsLong(pilot_value);
+        $1->pilots[_i].imag = 0.0;
+      } else if (PyFloat_Check(pilot_value)) {
+        $1->pilots[_i].real = PyFloat_AsDouble(pilot_value);
+        $1->pilots[_i].imag = 0.0;
+      } else if (PyComplex_Check(pilot_value)) {
+        $1->pilots[_i].real = PyComplex_RealAsDouble(pilot_value);
+        $1->pilots[_i].imag = PyComplex_ImagAsDouble(pilot_value);
+      } else {
+        PyErr_Format(PyExc_TypeError, "Pilot at %d not a number", PyInt_AsLong(pilot_idx));
+        SWIG_fail;
+      }
+
+      // Py_DECREF(pilot_idx);
+      // Py_DECREF(pilot_value);
+      _i++;
+    }
+
+    // Py_DECREF(item);
+  } else {
+    // fill in the default {}
+    $1->num_pilots = 8;
+    $1->pilots = malloc($1->num_pilots * sizeof(pilot_tone));
+
+    $1->pilots[0].pos = 4;
+    $1->pilots[1].pos = 12;
+    $1->pilots[2].pos = 20;
+    $1->pilots[3].pos = 28;
+    $1->pilots[4].pos = 36;
+    $1->pilots[5].pos = 44;
+    $1->pilots[6].pos = 52;
+    $1->pilots[7].pos = 60;
+
+    for (int i = 0; i < 8; i++) {
+      $1->pilots[i].real = $1->pilots[i].imag = 1.0;
+    }
+  }
+
+  // make sure pilots are sorted by idx
+  qsort($1->pilots, $1->num_pilots, sizeof(pilot_tone), pilot_compare);
+
   $1->cc_length = 2;
   $1->cc_constr = malloc(2 * sizeof(constraint_t));
   $1->cc_constr[0] = 0x1;
@@ -101,17 +252,25 @@
   key = PyString_FromString("src");
   val = PyInt_FromLong($1->src);
   PyDict_SetItem(dict, key, val);
+  Py_DECREF(key);
 
   key = PyString_FromString("dst");
   val = PyInt_FromLong($1->dst);
   PyDict_SetItem(dict, key, val);
+  Py_DECREF(key);
 }
 
 %typemap(freearg) tx_info_t* {
   if ($1) {
+    if ($1->pilots) {
+      free($1->pilots);
+      $1->pilots = NULL;
+      $1->num_pilots = 0;
+    }
     if ($1->cc_constr) {
       free($1->cc_constr);
       $1->cc_constr = NULL;
+      $1->cc_length = 0;
     }
     free($1);
     $1 = NULL;
