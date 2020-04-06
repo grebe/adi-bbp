@@ -202,16 +202,35 @@ int pilot_compare(const void* e1, const void* e2)
   }
 }
 
-static inline void map_pilots(
-    uint8_t* __restrict__ in,
-    uint8_t* __restrict__ out,
-    uint64_t n_bytes,
+static inline void add_pilots(
+    double* __restrict__ in,
+    double* __restrict__ out,
+    uint64_t n_in,
+    uint64_t n_out,
     uint64_t n_fft,
     uint8_t num_pilots,
     pilot_tone *pilots)
 {
-  // TODO
-  memcpy(out, in, n_bytes);
+  uint64_t in_idx = 0, out_idx = 0, pilots_idx = 0;
+  while (out_idx < n_out) {
+    if (pilots_idx < num_pilots && pilots[pilots_idx].pos == (out_idx % n_fft)) {
+      out[out_idx * 2] = pilots[pilots_idx].real;
+      out[out_idx * 2 + 1] = pilots[pilots_idx].imag;
+      pilots_idx += 1;
+      if (pilots_idx >= num_pilots) {
+        pilots_idx = 0;
+      }
+    } else if (in_idx < n_in) {
+      out[out_idx * 2] = in[in_idx];
+      out[out_idx * 2 + 1] = in[in_idx + 1];
+      in_idx += 2;
+    } else {
+      out[out_idx * 2] = 0.0;
+      out[out_idx * 2 + 1] = 0.0;
+    }
+
+    out_idx++;
+  }
 }
 
 static void
@@ -226,8 +245,8 @@ modulate(uint8_t* __restrict__ in, size_t in_len, double* __restrict__ samps)
       sym = current & 0x3;
       current >>= 2;
       size_t idx = ((i << 2) + j) << 1;
-      samps[idx] = (sym & 0x2) ? 1.0 : -1.0;
-      samps[idx + 1] = (sym & 0x1) ? 1.0 : -1.0;
+      samps[idx] = (sym & 0x2) ? pp : -pp;
+      samps[idx + 1] = (sym & 0x1) ? pp : -pp;
     }
   }
 }
@@ -269,8 +288,8 @@ void encode(uint8_t data[20], samp_t samps[222], tx_info_t *info)
   uint32_t i;
   uint8_t frame[24];
   uint8_t encoded[48];
-  uint8_t mapped[48];
   double modulated[192 * 2];
+  double mapped[192 * 2];
   double w[32];
   int ip[10];
 
@@ -294,21 +313,21 @@ void encode(uint8_t data[20], samp_t samps[222], tx_info_t *info)
       encoded,
       info->cc_constr, info->cc_length);
 
-  // map
-  // direct mapping with pilots inserted
-  map_pilots(encoded, mapped, 48, 64, info->num_pilots, info->pilots);
+  // map (direct mapping)
 
   // modulate
-  modulate(mapped, 48, modulated);
+  modulate(encoded, 48, modulated);
+
+  // add pilots
+  add_pilots(modulated, mapped, 48, 64, 64, info->num_pilots, info->pilots);
 
   // fft
   for (i = 0; i < 3; i++) {
-    cdft(2 * 64, -1, modulated + 2 * 64 * i, ip, w);
+    cdft(2 * 64, -1, mapped + 2 * 64 * i, ip, w);
   }
 
   // cast double to fixed point, add cp
-  double_to_fixed_with_cp(modulated, 64, 3, 10, samps);
-
+  double_to_fixed_with_cp(mapped, 64, 3, 10, samps);
 }
 
 void encode_linear_seq(uint64_t n, samp_t* samps)

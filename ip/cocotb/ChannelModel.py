@@ -43,18 +43,18 @@ class SISOChannel(object):
             self._queue.append(0.0 + 0.0j) # (i/100.0) + 0.0j)
 
     def push_packed_sample(self, sample: str, width: int=2, bp: int=15):
-        print(f"Pushing {sample}")
+        # print(f"Pushing {sample}")
         sample = unpack(sample, width=width, bp=bp)
         sample = sample * self.tap * self._rotation
         self._rotation = self._rotation * np.exp(1j * self.cfo * self.fc / self.fs)
         # normalize
         self._rotation = self._rotation / np.abs(self._rotation)
-        print(f"Pushing {sample}")
+        # print(f"Pushing {sample}")
         self._queue.append(sample)
 
     def pop_packed_sample(self, width:int=2, bp:int=15) -> bytes:
         sample = self._queue.pop()
-        print(f"Popping {sample}")
+        # print(f"Popping {sample}")
         return pack(sample, width=width, bp=bp)
 
 class ChannelTX(object):

@@ -17,8 +17,9 @@ VERILOG_SOURCES = $(VERILOG_DIR)/Baseband.v \
 				  $(VERILOG_DIR)/AsyncResetReg.v \
 				  $(VERILOG_DIR)/circularTable16.v \
 				  $(VERILOG_DIR)/NCOTableLUT.v \
-				  $(VERILOG_DIR)/NCOTableLUT_1.v \
-				  $(VERILOG_DIR)/AXI4SingleTapChannel.v
+				  $(VERILOG_DIR)/NCOTableLUT_1.v
+
+				  # $(VERILOG_DIR)/AXI4SingleTapChannel.v
 
 TOPLEVEL = Baseband
 
@@ -29,7 +30,7 @@ LD_LIBRARY_PATH := $(PWD)/../cosim:$(LD_LIBRARY_PATH)
 include $(shell cocotb-config --makefiles)/Makefile.inc
 include $(shell cocotb-config --makefiles)/Makefile.sim
 
-$(VERILOG_SOURCES):
+$(VERILOG_SOURCES) ../Baseband.v:
 	cd .. && $(MAKE) Baseband.v
 
 .icarus_touchup.stamp: ../Baseband.v

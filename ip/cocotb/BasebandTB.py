@@ -7,7 +7,7 @@ import cocotb
 from cocotb.decorators import coroutine
 from cocotb.binary import BinaryValue
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, RisingEdge, ReadOnly, Timer
+from cocotb.triggers import ClockCycles, First, ReadOnly, RisingEdge, Timer
 from cocotb.drivers import BitDriver
 from cocotb.drivers.amba import AXI4StreamMaster as STDriver
 from cocotb.monitors.amba import AXI4StreamMonitor as STMonitor
@@ -22,8 +22,10 @@ from cocotb.generators.byte import random_data, get_bytes
 from cocotb.generators.bit import (wave, intermittent_single_cycles,
                                    random_50_percent)
 
+import matplotlib.pyplot as plt
 import numpy as np
 
+from DecoupledMonitor import DecoupledMonitor
 import tx
 
 from ChannelModel import SISOChannel
@@ -100,9 +102,12 @@ class BasebandTB(object):
         self.expected_output = []
         self.txdata = []
         self.write_monitor = WriteMonitor(dut, "m_axi", dut.s_axi_aclk, **lower_axi)
+        eq_block = dut.sAxiIsland.freqRx.freqRx.eq
+        self.eq_monitor_in = DecoupledMonitor(eq_block, "in", eq_block.clock, reset=eq_block.reset)
+
         self.scoreboard = Scoreboard(dut)
         # self.scoreboard.add_interface(self.stream_out, self.expected_output)
-        self.scoreboard.add_interface(self.write_monitor, self.txdata)
+        # self.scoreboard.add_interface(self.write_monitor, self.txdata)
         level = logging.DEBUG if debug else logging.WARNING
         self.stream_in.log.setLevel(level)
         self.csr.log.setLevel(level)
@@ -221,12 +226,12 @@ class BasebandTB(object):
         settings = {
             'autocorrFF': 0.9,
             'peakThreshold': 0.0,
-            'peakOffset': 0.5,
+            'peakOffset': 3.0,
             'freqMultiplier': 0.0,
             'autocorrDepthApart': 64,
             'autocorrDepthOverlap': 64,
             'peakDetectNumPeaks': 3,
-            'peakDetectPeakDistance': 160,
+            'peakDetectPeakDistance': 64,
             'packetLength': 1024,
         }
         representations = {
@@ -266,6 +271,16 @@ class BasebandTB(object):
         # self.dma_to_mm(base = 0 * 1024 * 4, size = len(txdata))
 
     @cocotb.coroutine
+    def handle_packet_detect(self, *, base = 0x400):
+        while True:
+            # check if an interrupt has fired
+            if not self.dut.skid_ints_0.value:
+                # if not, wait for one
+                yield RisingEdge(self.dut.skid_ints_0)
+            time = yield self.csr.read(base + 12 * 4)
+            print(f"Saw packet at time {time.signed_integer}")
+
+    @cocotb.coroutine
     def reset(self, duration=5):
         self.dut._log.debug("Resetting DUT")
         self.dut.reset <= 1
@@ -293,7 +308,7 @@ def encode_tx(data, *, addPreamble = True):
     out = []
     if addPreamble:
         out += tx.get_stf()
-    # out += tx.encode(data, {"src": 2, "dst": 3})
+    out += tx.encode(data, {"src": 2, "dst": 3})
     # convert to byte string
     out = b''.join([i.to_bytes(4, 'little') for i in out])
     return out
@@ -334,7 +349,9 @@ def run_test(dut, data_in=None, config_coroutine=None, idle_inserter=None, backp
 
     # get tx packet
     print("STARTING MM -> DAC")
-    yield tb.transmit([1] * 20)
+    yield tb.transmit([0] * 20)
+
+    cocotb.fork(tb.handle_packet_detect())
 
     print("STARTING RX -> MM")
     rx = cocotb.fork(tb.dma_to_mm(base = 1024 * 4, size = 128//4 - 1))
@@ -342,6 +359,15 @@ def run_test(dut, data_in=None, config_coroutine=None, idle_inserter=None, backp
 
     # wait
     yield First(rx, timeout)
+
+
+    print(tb.eq_monitor_in[0])
+    plt.plot(range(len(tb.eq_monitor_in)), [i["bits_14_real"] for i in tb.eq_monitor_in])
+    plt.show()
+
+    # for i in range(len(tb.eq_monitor_in)):
+    #     print(tb.eq_monitor_in[i])
+
 
     raise tb.scoreboard.result
 
