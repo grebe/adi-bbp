@@ -225,14 +225,15 @@ class BasebandTB(object):
     def set_timerx(self, base=0x400, **kwargs):
         settings = {
             'autocorrFF': 0.9,
-            'peakThreshold': 0.0,
-            'peakOffset': 3.0,
+            'peakThreshold': 1.5, #0.0
+            'peakOffset': 0.0, #1.0
             'freqMultiplier': 0.0,
             'autocorrDepthApart': 64,
             'autocorrDepthOverlap': 64,
-            'peakDetectNumPeaks': 3,
-            'peakDetectPeakDistance': 64,
-            'packetLength': 1024,
+            'peakDetectNumPeaks': 16,
+            'peakDetectPeakDistance': 32,
+            'packetLength': 222 + 64,
+            'samplesToDrop': 64,
         }
         representations = {
             'autocorrFF': FixedPointRepresentation(bp = 17),
@@ -243,7 +244,8 @@ class BasebandTB(object):
             'autocorrDepthOverlap': IntRepresentation(),
             'peakDetectNumPeaks': IntRepresentation(),
             'peakDetectPeakDistance': IntRepresentation(),
-            'packetLength': IntRepresentation()
+            'packetLength': IntRepresentation(),
+            'samplesToDrop': IntRepresentation()
         }
 
         settings = { **settings, **kwargs}
@@ -277,7 +279,7 @@ class BasebandTB(object):
             if not self.dut.skid_ints_0.value:
                 # if not, wait for one
                 yield RisingEdge(self.dut.skid_ints_0)
-            time = yield self.csr.read(base + 12 * 4)
+            time = yield self.csr.read(base + 13 * 4)
             print(f"Saw packet at time {time.signed_integer}")
 
     @cocotb.coroutine
@@ -361,9 +363,9 @@ def run_test(dut, data_in=None, config_coroutine=None, idle_inserter=None, backp
     yield First(rx, timeout)
 
 
-    print(tb.eq_monitor_in[0])
-    plt.plot(range(len(tb.eq_monitor_in)), [i["bits_14_real"] for i in tb.eq_monitor_in])
-    plt.show()
+    # print(tb.eq_monitor_in[0])
+    # plt.plot(range(len(tb.eq_monitor_in)), [i["bits_14_real"] for i in tb.eq_monitor_in])
+    # plt.show()
 
     # for i in range(len(tb.eq_monitor_in)):
     #     print(tb.eq_monitor_in[i])

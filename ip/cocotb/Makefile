@@ -13,11 +13,10 @@ PYTHONPATH := $(PWD)/../cosim:$(PYTHONPATH)
 endif
 
 VERILOG_DIR = ../
-VERILOG_SOURCES = $(VERILOG_DIR)/Baseband.v \
-				  $(VERILOG_DIR)/AsyncResetReg.v \
-				  $(VERILOG_DIR)/circularTable16.v \
+VERILOG_SOURCES = $(VERILOG_DIR)/circularTable16.v \
 				  $(VERILOG_DIR)/NCOTableLUT.v \
-				  $(VERILOG_DIR)/NCOTableLUT_1.v
+				  $(VERILOG_DIR)/NCOTableLUT_1.v \
+				  $(VERILOG_DIR)/Baseband.v
 
 				  # $(VERILOG_DIR)/AXI4SingleTapChannel.v
 

@@ -36,7 +36,7 @@ class Baseband(
     nFFT = 64,
     autocorrParams = AutocorrParams(
       protoIn = protoIn,
-      protoOut = Some(DspComplex(FixedPoint(24.W, 20.BP))),
+      protoOut = Some(DspComplex(FixedPoint(24.W, 15.BP))),
       maxApart = 256,
       maxOverlap = 256,
     ),
