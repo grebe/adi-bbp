@@ -9,8 +9,16 @@ import freechips.rocketchip.amba.axi4stream._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.interrupts.{IntSinkNode, IntSinkParameters, IntSinkPortParameters, IntXbar}
+import freechips.rocketchip.regmapper._
 import freechips.rocketchip.subsystem.CrossingWrapper
 import ofdm._
+
+class DMAIO extends Bundle {
+  val valid_out = Input(Vec(4, Bool()))
+  val enable    = Output(Vec(4, Bool()))
+  val valid     = Output(Vec(4, Bool()))
+  val dunf      = Input(Bool())
+}
 
 class Baseband(
   val adcWidth: Int = 16,
@@ -59,10 +67,12 @@ class Baseband(
   val freqRx = DspContext.alter(context) {
     sAxiIsland { LazyModule(new AXI4FreqDomainRXBlock(rxParams)) }
   }
-  val (inputStreamMux, inputStreamMuxMem) = sAxiIsland { StreamMux.axi(AddressSet(0x300, 0xFF), beatBytes = 4) }
-  val (splitter, splitterMem) = sAxiIsland { StreamMux.axi(AddressSet(0x900, 0xFF), beatBytes = 4) }
+  val txScheduler = sAxiIsland { LazyModule(new TimeGate(AddressSet(0x800, 0xFF))) }// , counter = Some(timeRx.rx.globalCycleCounter))) }
+  val (inputStreamMux, inputStreamMuxMem) = sAxiIsland { StreamMux.axi(AddressSet(0x300, 0xFF), beatBytes = beatBytes) }
+  val (splitter, splitterMem) = sAxiIsland { StreamMux.axi(AddressSet(0x900, 0xFF), beatBytes = beatBytes) }
+  val regmap = AXI4RegisterNode(AddressSet(0x79040A00L, 0xFF), beatBytes = beatBytes)
 
-  val (skidStream, skidMem, skidIntSource) = sAxiIsland { AXI4SkidBuffer(skidAddress, depth = 512, beatBytes = 4) }
+  val (skidStream, skidMem, skidIntSource) = sAxiIsland { AXI4SkidBuffer(skidAddress, depth = 512, beatBytes = beatBytes) }
   val intSink =
     IntSinkNode(Seq(IntSinkPortParameters(Seq(IntSinkParameters()))))
     // sAxiIsland { IntSinkNode(Seq(IntSinkPortParameters(Seq(IntSinkParameters())))) }
@@ -99,7 +109,7 @@ class Baseband(
   streamNodeSlave :=
     AXI4StreamBuffer() :=
     // streamOutMux.streamNode
-    sAxiIsland.crossAXI4StreamOut(dma.streamNode)
+    sAxiIsland.crossAXI4StreamOut(txScheduler.streamNode := dma.streamNode)
   // streamOutMux.streamNode := sAxiIsland.crossAXI4StreamOut(dma.streamNode)
   // streamOutMux.streamNode := gold
 
@@ -130,7 +140,9 @@ class Baseband(
     intXbar := skidIntSource
     dma.axiSlaveNode := xbar
     skidMem := xbar
+    sAxiIsland.crossAXI4In(regmap) := xbar
     timeRx.mem.get := xbar
+    txScheduler.mem := xbar
     inputStreamMuxMem := xbar
     splitterMem := xbar
     xbar := axiMasterNode
@@ -158,13 +170,11 @@ class Baseband(
     val adc_0_data = IO(Input(UInt((2 * adcWidth).W)))
     val adc_0_ready = IO(Output(Bool()))
     // each bit indicates if I and/or Q is enabled
-    val adc_0_user = IO(Input(UInt(2.W)))
     val adc_1_valid = IO(Input(Bool()))
     // I and Q concatenated
     val adc_1_data = IO(Input(UInt((2 * adcWidth).W)))
     val adc_1_ready = IO(Output(Bool()))
     // each bit indicates if I and/or Q is enabled
-    val adc_1_user = IO(Input(UInt(2.W)))
 
     // dac outputs
     val dac_0_valid = IO(Output(Bool()))
@@ -175,23 +185,11 @@ class Baseband(
     val dac_1_valid = IO(Output(Bool()))
     val dac_1_ready = IO(Input(Bool()))
     val dac_1_data  = IO(Output(UInt((2 * dacWidth).W)))
-    // each bit indicates if I and/or Q is enabled
-    val dac_1_user  = IO(Output(UInt(2.W)))
 
     // dma -> dac IOs
-    val dma_0_ready = IO(Output(Bool()))
-    val dma_0_valid = IO(Input(Bool()))
-    val dma_0_data = IO(Input(UInt((2 * dacWidth).W)))
-    // each bit indicates if I and/or Q is enabled
-    val dma_0_user = IO(Input(UInt(2.W)))
-    val dma_1_ready = IO(Output(Bool()))
-    val dma_1_valid = IO(Input(Bool()))
-    val dma_1_data = IO(Input(UInt((2 * dacWidth).W)))
-    // each bit indicates if I and/or Q is enabled
-    val dma_1_user = IO(Input(UInt(2.W)))
-
-    val dma_dunf = IO(Input(Bool()))
-    val dac_dunf = IO(Output(Bool()))
+    val dmain = IO(new DMAIO)
+    val dmain_data = IO(Input(Vec(4, UInt(dacWidth.W))))
+    val dmaout = IO(Flipped(new DMAIO))
 
     // axi master interface
     val m_axi_aresetn = IO(Output(Reset()))
@@ -265,7 +263,7 @@ class Baseband(
     adc_0_ready := streamIn.ready
     streamIn.valid := adc_0_valid
     streamIn.bits.data := adc_0_data
-    streamIn.bits.user := adc_0_user
+    streamIn.bits.user := 0.U
     streamIn.bits.last := false.B
     streamIn.bits.dest := 0.U
     streamIn.bits.id := 0.U
@@ -277,15 +275,6 @@ class Baseband(
     dac_0_data := streamOut.bits.data
     dac_0_user := streamOut.bits.user
     dac_0_valid := streamOut.valid
-
-    dma_0_ready := true.B
-
-    dma_1_ready := dac_1_ready
-    dac_1_data := dma_1_data
-    dac_1_user := dma_1_user
-    dac_1_valid := dma_1_valid
-
-    dac_dunf := dma_dunf
 
     m_axi_aresetn := s_axi_aresetn
 
@@ -365,5 +354,26 @@ class Baseband(
     s_axi_rdata := axiSlave.r.bits.data
     s_axi_rresp := axiSlave.r.bits.resp
     axiSlave.r.ready := s_axi_rready
+
+    withClockAndReset(clock, reset) {
+      val enableTx = RegInit(false.B)
+      // unconditionally passthrough for now (setting enableTx will still disable)
+      dac_1_data := util.Cat(dmain_data(2), dmain_data(3))
+      dac_1_valid := false.B
+      when (enableTx) {
+        dmain.enable.foreach(_ := false.B)
+        dmain.valid.foreach(_ := false.B)
+        dmaout.valid_out.foreach(_ := false.B)
+        dmaout.dunf := false.B
+      } .otherwise {
+        dmaout <> dmain
+        dac_0_data := util.Cat(dmain_data(0), dmain_data(1))
+      }
+
+      regmap.regmap(
+        0 * beatBytes -> Seq(RegField(1, enableTx,
+          RegFieldDesc("enableTx", "0 -> use built-in ADI TX, 1-> use custom baseband TX", volatile=false))),
+      )
+    }
   } }
 }

@@ -5,8 +5,9 @@ create_project baseband . -force
 ## add files
 set ip_constr_files ""
 set proj_fileset [get_filesets sources_1]
-add_files -norecurse -scan_for_includes -fileset $proj_fileset "AsyncResetReg.v" "circularTable16.v" "Baseband.v" "NCOTableLUT.v" "NCOTableLUT_1.v" "baseband.xdc"
+add_files -norecurse -scan_for_includes -fileset $proj_fileset "circularTable16.v" "Baseband.v" "NCOTableLUT.v" "NCOTableLUT_1.v" "baseband.xdc"
 set_property "top" "Baseband" $proj_fileset
+set_property USED_IN {synthesis out_of_context} [get_files "baseband.xdc"]
 
 # make ip
 ipx::package_project -root_dir . -vendor cs.berkeley.edu -library user -taxonomy /Berkeley
@@ -177,8 +178,8 @@ ipx::save_core
 #ipx::remove_bus_interface clock [ipx::current_core]
 
 
-# ipx::infer_bus_interface reset xilinx.com:signal:reset_rtl:1.0 [ipx::current_core]
-# ipx::infer_bus_interface clock xilinx.com:signal:clock_rtl:1.0 [ipx::current_core]
+ipx::infer_bus_interface reset xilinx.com:signal:reset_rtl:1.0 [ipx::current_core]
+ipx::infer_bus_interface clock xilinx.com:signal:clock_rtl:1.0 [ipx::current_core]
 
 ipx::add_bus_parameter ASSOCIATED_BUSIF [ipx::get_bus_interfaces s_axi_aresetn \
   -of_objects [ipx::current_core]]

@@ -77,7 +77,7 @@ set_property -dict {PACKAGE_PIN AC18 IOSTANDARD LVCMOS25} [get_ports gpio_muxout
 
 
 # clocks
-create_clock -period 4.000 -name rx_clk [get_ports rx_clk_in_p]
+create_clock -period 8.000 -name rx_clk [get_ports rx_clk_in_p]
 
 # Input Delays
 # set_input_delay -clock [get_clocks {rx_clk}] -clock_fall -min -add_delay 0.25 [get_ports {rx_data_in_n[*]}]
@@ -122,21 +122,33 @@ create_clock -period 4.000 -name rx_clk [get_ports rx_clk_in_p]
 # set_output_delay -clock [get_clocks {rx_clk}] -max -add_delay 1.0 [get_ports {tx_frame_out_p}]
 
 # False paths in baseband CDC
-set_false_path -from i_system_wrapper/system_i/baseband/inst/axi4asink/AsyncQueueSource_1/mem_1_id_reg/C -to i_system_wrapper/system_i/baseband/inst/sAxiIsland/axi4asource/AsyncQueueSink_1/deq_bits_reg/sync_0_reg[2]/D
+# set_false_path -from i_system_wrapper/system_i/baseband/inst/axi4asink/AsyncQueueSource_1/mem_1_id_reg/C -to i_system_wrapper/system_i/baseband/inst/sAxiIsland/axi4asource/AsyncQueueSink_1/deq_bits_reg/sync_0_reg[2]/D
+#
+# set_false_path \
+#                 -from [get_pins -hier -regexp .*/i_up_adc_common/i_core_rst_reg/rst_reg.*/C] \
+#                 -to [get_pins -hier -regexp .*/AsyncQueueSource.*/AsyncValidSync.*/sink_valid/sync.*/reg/CLR]
+# set_false_path \
+#                 -from [get_pins -hier -regexp .*/i_up_adc_common/i_core_rst_reg/rst_reg.*/C] \
+#                 -to [get_pins -hier -regexp .*/AsyncQueueSource.*/AsyncValidSync.*/source_extend/sync_0/reg/CLR]
+# set_false_path \
+#                 -from [get_pins -hier -regexp .*/i_up_adc_common/i_core_rst_reg/rst_reg.*/C] \
+#                 -to [get_pins -hier -regexp .*/AsyncQueueSink.*/AsyncValidSync.*/sink_valid/sync.*/reg.*/CLR]
+# set_false_path \
+#                 -from [get_pins -hier -regexp .*/sys_rstgen/.*/.*/C] \
+#                 -to [get_pins -hier -regexp .*/AsyncQueueSink.*/AsyncValidSync.*/source_extend/sync.*/reg.*/CLR]
+# set_false_path \
+#                 -from [get_pins -hier -regexp .*/i_up_adc_common/i_core_rst_reg/rst_reg.*/C] \
+#                 -to [get_pins -hier -regexp .*/AsyncQueueSink.*/AsyncValidSync.*/source_extend/sync.*/reg.*/CLR]
+#
+# set_property ASYNC_REG true [get_cells -hier -regexp .*/AsyncResetSynchronizerPrimitiveShiftReg_.*/sync_.*]
+# set_property ASYNC_REG true [get_cells -hier -regexp .*/ClockCrossingReg.*/cdc_reg.*]
 
-set_false_path \
-                -from [get_pins -hier -regexp .*/i_up_adc_common/i_core_rst_reg/rst_reg.*/C] \
-                -to [get_pins -hier -regexp .*/AsyncQueueSource.*/AsyncValidSync.*/sink_valid/sync.*/reg/CLR]
-set_false_path \
-                -from [get_pins -hier -regexp .*/i_up_adc_common/i_core_rst_reg/rst_reg.*/C] \
-                -to [get_pins -hier -regexp .*/AsyncQueueSource.*/AsyncValidSync.*/source_extend/sync_0/reg/CLR]
-set_false_path \
-                -from [get_pins -hier -regexp .*/i_up_adc_common/i_core_rst_reg/rst_reg.*/C] \
-                -to [get_pins -hier -regexp .*/AsyncQueueSink.*/AsyncValidSync.*/sink_valid/sync.*/reg.*/CLR]
-set_false_path \
-                -from [get_pins -hier -regexp .*/sys_rstgen/.*/.*/C] \
-                -to [get_pins -hier -regexp .*/AsyncQueueSink.*/AsyncValidSync.*/source_extend/sync.*/reg.*/CLR]
-set_false_path \
-                -from [get_pins -hier -regexp .*/i_up_adc_common/i_core_rst_reg/rst_reg.*/C] \
-                -to [get_pins -hier -regexp .*/AsyncQueueSink.*/AsyncValidSync.*/source_extend/sync.*/reg.*/CLR]
+# set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/s_axi_aw.*]
+# set_property MARK_DEBUG true [get_nets -hier -regexp .*/baseband/s_axi_aw.*]
+# set_property DONT_TOUCH true [get_nets -hier -regexp .*/baseband/s_axi_w.*]
+# set_property MARK_DEBUG true [get_nets -hier -regexp .*/baseband/s_axi_w.*]
+
+set_clock_groups -asynchronous \
+  -group [get_clocks rx_clk] \
+  -group [get_clocks clk_fpga_0]
 

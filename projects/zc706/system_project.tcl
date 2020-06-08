@@ -40,17 +40,24 @@ make_targets zc706.srcs/sources_1
 
 project_run_synth zc706
 
+# create_pblock pblock_rx
+# add_cells_to_pblock pblock_rx [get_cells -hier -regexp .*/baseband/inst/sAxiIsland/.*] -clear_locs
+# place_pblocks -effort HIGH -utilization 45 [get_pblocks [list pblock_rx]]
+
 create_pblock pblock_freqRx
 add_cells_to_pblock pblock_freqRx [get_cells -hier -regexp .*/baseband/inst/sAxiIsland/freqRx/freqRx] -clear_locs
 
 create_pblock pblock_timeRx
 add_cells_to_pblock pblock_timeRx [get_cells -hier -regexp .*/baseband/inst/sAxiIsland/timeRx/rx] -clear_locs
 
-create_pblock pblock_baseband_crossings
-add_cells_to_pblock pblock_baseband_crossings [get_cells -hier -regexp .*/baseband/inst/.*/AsyncQueueS.*] -clear_locs
-add_cells_to_pblock pblock_baseband_crossings [get_cells -hier -regexp .*/baseband/inst/sAxiIsland/.*/AsyncQueueS.*] -clear_locs
-
-place_pblocks -effort HIGH -utilization 45 [get_pblocks [list pblock_freqRx pblock_timeRx pblock_baseband_crossings]]
+# create_pblock pblock_baseband_crossings
+# add_cells_to_pblock pblock_baseband_crossings [get_cells -hier -regexp .*/baseband/inst/.*/AsyncQueueS.*] -clear_locs
+# add_cells_to_pblock pblock_baseband_crossings [get_cells -hier -regexp .*/baseband/inst/sAxiIsland/.*/AsyncQueueS.*] -clear_locs
+# 
+# place_pblocks -effort HIGH -utilization 40 [get_pblocks [list pblock_timeRx]]
+# place_pblocks -effort HIGH -utilization 55 [get_pblocks [list pblock_freqRx]]
+resize_pblock pblock_timeRx -add SLICE_X0Y101:SLICE_X163Y50
+resize_pblock pblock_freqRx -add SLICE_X0Y126:SLICE_X163Y0
 
 
 # set_property DONT_TOUCH true [get_nets -hier -regexp .*/axi_hp3_interconnect/S00_AXI_.*]
