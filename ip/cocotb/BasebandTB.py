@@ -27,6 +27,7 @@ import numpy as np
 
 from DecoupledMonitor import DecoupledMonitor
 import tx
+from FFTMonitor import *
 
 from ChannelModel import SISOChannel
 
@@ -104,6 +105,9 @@ class BasebandTB(object):
         self.write_monitor = WriteMonitor(dut, "m_axi", dut.s_axi_aclk, **lower_axi)
         eq_block = dut.sAxiIsland.freqRx.freqRx.eq
         self.eq_monitor_in = DecoupledMonitor(eq_block, "in", eq_block.clock, reset=eq_block.reset)
+        fft_block = dut.sAxiIsland.freqRx.freqRx.fft
+        print(dir(fft_block))
+        self.fft_mon = FFTMonitor(fft_block, fft_block.clock)
 
         self.scoreboard = Scoreboard(dut)
         # self.scoreboard.add_interface(self.stream_out, self.expected_output)
@@ -232,8 +236,8 @@ class BasebandTB(object):
             'autocorrDepthOverlap': 64,
             'peakDetectNumPeaks': 16,
             'peakDetectPeakDistance': 32,
-            'packetLength': 222 + 64,
-            'samplesToDrop': 64,
+            'packetLength': 222 + 7,
+            'samplesToDrop': 7,
         }
         representations = {
             'autocorrFF': FixedPointRepresentation(bp = 17),
@@ -363,9 +367,16 @@ def run_test(dut, data_in=None, config_coroutine=None, idle_inserter=None, backp
     yield First(rx, timeout)
 
 
+    print(len(tb.eq_monitor_in))
     # print(tb.eq_monitor_in[0])
-    # plt.plot(range(len(tb.eq_monitor_in)), [i["bits_14_real"] for i in tb.eq_monitor_in])
-    # plt.show()
+    plt.plot(range(len(tb.eq_monitor_in)), [i["bits_14_real"] for i in tb.eq_monitor_in])
+    plt.show()
+
+    expected_out = tb.fft_mon.expected_output()
+    actual_out = tb.fft_mon.actual_output()
+    plt.plot(expected_out.real)
+    plt.plot(actual_out.real)
+    plt.show()
 
     # for i in range(len(tb.eq_monitor_in)):
     #     print(tb.eq_monitor_in[i])

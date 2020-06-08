@@ -20,9 +20,9 @@ VERILOG_SOURCES = $(VERILOG_DIR)/circularTable16.v \
 
 				  # $(VERILOG_DIR)/AXI4SingleTapChannel.v
 
-TOPLEVEL = Baseband
+TOPLEVEL ?= Baseband
 
-MODULE=BasebandTB
+MODULE ?= BasebandTB
 
 LD_LIBRARY_PATH := $(PWD)/../cosim:$(LD_LIBRARY_PATH)
 

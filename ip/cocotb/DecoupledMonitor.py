@@ -10,6 +10,9 @@ class DecoupledBus(TypedBus):
         prefix = name + "_bits"
         self._bits = [d[len(name)+1:] for d in dir(entity) if d.startswith(prefix)]
 
+        # kwargs["ready"] = f"{name}_ready"
+        # kwargs["valid"] = f"{name}_valid"
+
         self._signals = ["ready", "valid"] + self._bits
         TypedBus.__init__(self, entity, name, **kwargs)
 
