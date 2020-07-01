@@ -36,8 +36,8 @@ class Baseband(
     protoADC = protoIn,
     protoAngle = FixedPoint(20.W, 17.BP),
     // protoFFTIn = DspComplex(FixedPoint(20.W, 14.BP), FixedPoint(20.W, 14.BP)),
-    protoFFTIn = DspComplex(FixedPoint(16.W, 10.BP), FixedPoint(16.W, 10.BP)),
-    protoTwiddle = DspComplex(FixedPoint(20.W, 14.BP), FixedPoint(20.W, 14.BP)),
+    protoFFTIn = DspComplex(FixedPoint(16.W, 14.BP), FixedPoint(16.W, 14.BP)),
+    protoTwiddle = DspComplex(FixedPoint(20.W, 18.BP), FixedPoint(20.W, 18.BP)),
     protoLLR = FixedPoint(6.W, 2.BP),
     maxNumPeaks = 256,
     timeStampWidth = 32,
@@ -53,7 +53,7 @@ class Baseband(
       tableSize = 64,
       phaseConv = u => u.asTypeOf(FixedPoint(20.W, 17.BP)),
       protoFreq = FixedPoint(16.W, 8.BP),
-      protoOut = FixedPoint(16.W, 14.BP),
+      protoOut = FixedPoint(18.W, 16.BP),
     ),
   )
   val context = DspContext.current.copy(
@@ -114,6 +114,7 @@ class Baseband(
   // streamOutMux.streamNode := gold
 
   alignerAXI := sAxiIsland.crossAXI4Out(xbar)
+  regmap := sAxiIsland.crossAXI4Out(xbar)
   // streamOutMux.axiNode := sAxiIsland.crossAXI4Out(xbar)
   sAxiIsland {
     // val scheduler = LazyModule(new AXI4_StreamScheduler(
@@ -140,7 +141,6 @@ class Baseband(
     intXbar := skidIntSource
     dma.axiSlaveNode := xbar
     skidMem := xbar
-    sAxiIsland.crossAXI4In(regmap) := xbar
     timeRx.mem.get := xbar
     txScheduler.mem := xbar
     inputStreamMuxMem := xbar
