@@ -56,8 +56,8 @@ add_cells_to_pblock pblock_timeRx [get_cells -hier -regexp .*/baseband/inst/sAxi
 # 
 # place_pblocks -effort HIGH -utilization 40 [get_pblocks [list pblock_timeRx]]
 # place_pblocks -effort HIGH -utilization 55 [get_pblocks [list pblock_freqRx]]
-resize_pblock pblock_timeRx -add SLICE_X0Y101:SLICE_X163Y50
-resize_pblock pblock_freqRx -add SLICE_X0Y126:SLICE_X163Y0
+resize_pblock pblock_timeRx -add SLICE_X0Y210:SLICE_X163Y50
+resize_pblock pblock_freqRx -add SLICE_X0Y170:SLICE_X163Y0
 
 
 # set_property DONT_TOUCH true [get_nets -hier -regexp .*/axi_hp3_interconnect/S00_AXI_.*]
