@@ -2,6 +2,7 @@
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "tx.h"
@@ -202,7 +203,7 @@ int pilot_compare(const void* e1, const void* e2)
   }
 }
 
-static inline void add_pilots(
+static inline uint64_t add_pilots(
     double* __restrict__ in,
     double* __restrict__ out,
     uint64_t n_in,
@@ -214,23 +215,26 @@ static inline void add_pilots(
   uint64_t in_idx = 0, out_idx = 0, pilots_idx = 0;
   while (out_idx < n_out) {
     if (pilots_idx < num_pilots && pilots[pilots_idx].pos == (out_idx % n_fft)) {
-      out[out_idx * 2] = pilots[pilots_idx].real;
-      out[out_idx * 2 + 1] = pilots[pilots_idx].imag;
+      out[out_idx * 2] = pilots[pilots_idx].real * pp;
+      out[out_idx * 2 + 1] = pilots[pilots_idx].imag * pp;
       pilots_idx += 1;
       if (pilots_idx >= num_pilots) {
         pilots_idx = 0;
       }
     } else if (in_idx < n_in) {
-      out[out_idx * 2] = in[in_idx];
-      out[out_idx * 2 + 1] = in[in_idx + 1];
-      in_idx += 2;
+      out[out_idx * 2] = in[in_idx * 2];
+      out[out_idx * 2 + 1] = in[in_idx * 2 + 1];
+      in_idx ++;
     } else {
+      fprintf(stderr, "No more pilots or input left for out_idx = %lu!\n", out_idx);
       out[out_idx * 2] = 0.0;
       out[out_idx * 2 + 1] = 0.0;
     }
 
     out_idx++;
   }
+
+  return out_idx;
 }
 
 static void
@@ -285,11 +289,12 @@ static inline void double_to_fixed_with_cp(
 
 void encode(uint8_t data[20], samp_t samps[222], tx_info_t *info)
 {
+  uint64_t size_out = 0;
   uint32_t i;
   uint8_t frame[24];
   uint8_t encoded[48];
   double modulated[192 * 2];
-  double mapped[192 * 2];
+  double mapped[216 * 2];
   double w[32];
   int ip[10];
 
@@ -315,16 +320,47 @@ void encode(uint8_t data[20], samp_t samps[222], tx_info_t *info)
 
   // map (direct mapping)
 
+  // TODO REMOVE (DEBUG ONLY)
+  memset(encoded, 0x66, 48);
+
   // modulate
   modulate(encoded, 48, modulated);
 
   // add pilots
-  add_pilots(modulated, mapped, 48, 64, 64, info->num_pilots, info->pilots);
+  if (
+      (size_out = add_pilots(modulated, mapped, 192, 216, 64, info->num_pilots, info->pilots))
+      != 216) {
+    fprintf(stderr, "add_pilots: Got %lu out, expected 64\n", size_out);
+  } else { // TODO DEBUG REMOVE
+    // fprintf(stderr, "add_pilots: Saw %d pilots\n", info->num_pilots);
+    // for (i = 0; i < info->num_pilots; i++) {
+    //   fprintf(stderr,
+    //           "add_pilots:   Pilot at %d with value (%lf + j%lf)\n",
+    //           info->pilots[i].pos,
+    //           info->pilots[i].real,
+    //           info->pilots[i].imag);
+    // }
+  }
+  // for (i = 0; i < 3 * 64 * 2; i+=2) {
+  //   if (i % (64 * 2) == 0) {
+  //     fprintf(stderr, "\nout freq %d = \n", i / (64 * 2));
+  //   }
+  //   fprintf(stderr,
+  //       "%d\t %lf + j%lf,\n", (i/2) % 64, mapped[i], mapped[i+1]);
+  // }
 
   // fft
   for (i = 0; i < 3; i++) {
     cdft(2 * 64, -1, mapped + 2 * 64 * i, ip, w);
   }
+
+  // for (i = 0; i < 3 * 64 * 2; i+=2) {
+  //   if (i % (64 * 2) == 0) {
+  //     fprintf(stderr, "\nout time %d = \n", i / (64 * 2));
+  //   }
+  //   fprintf(stderr,
+  //       "%d\t %lf + j%lf,\n", (i/2) % 64, mapped[i], mapped[i+1]);
+  // }
 
   // cast double to fixed point, add cp
   double_to_fixed_with_cp(mapped, 64, 3, 10, samps);

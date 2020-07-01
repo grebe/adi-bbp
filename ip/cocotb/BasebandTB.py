@@ -104,10 +104,9 @@ class BasebandTB(object):
         self.txdata = []
         self.write_monitor = WriteMonitor(dut, "m_axi", dut.s_axi_aclk, **lower_axi)
         eq_block = dut.sAxiIsland.freqRx.freqRx.eq
-        self.eq_monitor_in = DecoupledMonitor(eq_block, "in", eq_block.clock, reset=eq_block.reset)
+        # self.eq_monitor_in = DecoupledMonitor(eq_block, "in", eq_block.clock, reset=eq_block.reset)
         fft_block = dut.sAxiIsland.freqRx.freqRx.fft
-        print(dir(fft_block))
-        self.fft_mon = FFTMonitor(fft_block, fft_block.clock)
+        # self.fft_mon = FFTMonitor(fft_block, fft_block.clock)
 
         self.scoreboard = Scoreboard(dut)
         # self.scoreboard.add_interface(self.stream_out, self.expected_output)
@@ -141,7 +140,8 @@ class BasebandTB(object):
             # print("get_channel")
             # dataword.assign(str(self.channel_model.pop_packed_sample()))
             # self.stream_in.bus.TDATA <= dataword
-            yield self.stream_in._driver_send(data=self.channel_model.pop_packed_sample(), sync=False)
+            data = self.channel_model.pop_packed_sample()
+            yield self.stream_in._driver_send(data=data, sync=False)
             # yield RisingEdge(self.dut.clock)
 
     @cocotb.coroutine
@@ -168,6 +168,8 @@ class BasebandTB(object):
     def dma_mm_to_dac(self, *, base = 0, size = None):
         if size is None:
             size = len(self.memory) // 4
+        # enable Tx / disable DMA passthrough
+        yield self.csr.write(0x79040A00 + 0 * 4, 1)
         # base
         yield self.csr.write(self.csrBase + 0x9 * 4, base)
         # length
@@ -191,6 +193,14 @@ class BasebandTB(object):
 
         # skid enable
         yield self.csr.write(self.csrBase + 0x200, 1)
+
+        # wait for end
+        while True:
+            yield ClockCycles(self.dut.s_axi_aclk, 50)
+            out = yield self.csr.read(self.csrBase + 0xD * 4)
+            if out == 0:
+                break
+        print("Done with TX")
 
     @cocotb.coroutine
     def set_aligner(self, base = 0x100, *, en = True, cnt = 1, cntPassthrough = False):
@@ -229,15 +239,16 @@ class BasebandTB(object):
     def set_timerx(self, base=0x400, **kwargs):
         settings = {
             'autocorrFF': 0.9,
-            'peakThreshold': 1.5, #0.0
-            'peakOffset': 0.0, #1.0
+            'peakThreshold': 0.05,
+            'peakOffset': 0.0,
             'freqMultiplier': 0.0,
-            'autocorrDepthApart': 64,
-            'autocorrDepthOverlap': 64,
+            'autocorrDepthApart': 65,
+            'autocorrDepthOverlap': 63,
             'peakDetectNumPeaks': 16,
             'peakDetectPeakDistance': 32,
             'packetLength': 222 + 7,
-            'samplesToDrop': 7,
+            'samplesToDrop': 0,
+            'inputDelay': 74,
         }
         representations = {
             'autocorrFF': FixedPointRepresentation(bp = 17),
@@ -249,7 +260,8 @@ class BasebandTB(object):
             'peakDetectNumPeaks': IntRepresentation(),
             'peakDetectPeakDistance': IntRepresentation(),
             'packetLength': IntRepresentation(),
-            'samplesToDrop': IntRepresentation()
+            'samplesToDrop': IntRepresentation(),
+            'inputDelay': IntRepresentation()
         }
 
         settings = { **settings, **kwargs}
@@ -275,6 +287,19 @@ class BasebandTB(object):
 
         yield self.dma_mm_to_dac(base = 0, size = len(txdata) // 4 - 1)
         # self.dma_to_mm(base = 0 * 1024 * 4, size = len(txdata))
+
+    @cocotb.coroutine
+    def transmit_forever(self, data, wait_cycles= 100):
+        txdata = encode_tx(data, addPreamble = True)
+        # txdata = encode_linear_seq(222)
+        self.txdata.extend(data)
+
+        for i in range(len(txdata)):
+            self.memory[i] = txdata[i]
+
+        while True:
+            yield ClockCycles(self.dut.clock, wait_cycles)
+            yield self.dma_mm_to_dac(base = 0, size = len(txdata) // 4 - 1)
 
     @cocotb.coroutine
     def handle_packet_detect(self, *, base = 0x400):
@@ -314,6 +339,9 @@ def encode_tx(data, *, addPreamble = True):
     out = []
     if addPreamble:
         out += tx.get_stf()
+    print(f"Preamble size is {len(out)}\n")
+    firstSymbol = tx.encode(data, {"src": 2, "dst": 3})[:64]
+    print(firstSymbol)
     out += tx.encode(data, {"src": 2, "dst": 3})
     # convert to byte string
     out = b''.join([i.to_bytes(4, 'little') for i in out])
@@ -329,7 +357,7 @@ def run_test(dut, data_in=None, config_coroutine=None, idle_inserter=None, backp
     yield tb.reset()
     print("RESET DONE")
 
-    yield tb.stream_in.send(b'0000000000000000')
+    # yield tb.stream_in.send(b'0000000000000000')
 
     # Start off optional coroutines
     if config_coroutine is not None:
@@ -338,9 +366,6 @@ def run_test(dut, data_in=None, config_coroutine=None, idle_inserter=None, backp
         tb.stream_in.set_valid_generator(idle_inserter())
     if backpressure_inserter is not None:
         tb.backpressure.start(backpressure_inserter())
-    cocotb.fork(tb.append_channel())
-    cocotb.fork(tb.get_channel())
-
     print("COROUTINES STARTED")
 
     # Wait 5 cycles before starting test
@@ -353,9 +378,14 @@ def run_test(dut, data_in=None, config_coroutine=None, idle_inserter=None, backp
     yield tb.set_input_splitter_mux()
     yield tb.set_aligner()
 
+    cocotb.fork(tb.append_channel())
+    cocotb.fork(tb.get_channel())
+
     # get tx packet
-    print("STARTING MM -> DAC")
-    yield tb.transmit([0] * 20)
+    print("STARTING MM -> TX")
+    # yield tb.transmit([0] * 20)
+    cocotb.fork(tb.transmit_forever([0] * 20))
+
 
     cocotb.fork(tb.handle_packet_detect())
 
@@ -367,16 +397,16 @@ def run_test(dut, data_in=None, config_coroutine=None, idle_inserter=None, backp
     yield First(rx, timeout)
 
 
-    print(len(tb.eq_monitor_in))
+    # print(len(tb.eq_monitor_in))
     # print(tb.eq_monitor_in[0])
-    plt.plot(range(len(tb.eq_monitor_in)), [i["bits_14_real"] for i in tb.eq_monitor_in])
-    plt.show()
+    # plt.plot(range(len(tb.eq_monitor_in)), [i["bits_14_real"] for i in tb.eq_monitor_in])
+    # plt.show()
 
-    expected_out = tb.fft_mon.expected_output()
-    actual_out = tb.fft_mon.actual_output()
-    plt.plot(expected_out.real)
-    plt.plot(actual_out.real)
-    plt.show()
+    # expected_out = tb.fft_mon.expected_output()
+    # actual_out = tb.fft_mon.actual_output()
+    # plt.plot(expected_out.real)
+    # plt.plot(actual_out.real)
+    # plt.show()
 
     # for i in range(len(tb.eq_monitor_in)):
     #     print(tb.eq_monitor_in[i])
