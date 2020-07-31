@@ -1,11 +1,9 @@
 package baseband
 
 import chisel3._
-import chisel3.util.log2Ceil
 import freechips.rocketchip.amba.axi4stream._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.regmapper.RegField
 
 trait HasGoldTable {
   val table = // VecInit(

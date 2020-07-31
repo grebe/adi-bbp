@@ -185,6 +185,7 @@ class Baseband(
     val dac_1_valid = IO(Output(Bool()))
     val dac_1_ready = IO(Input(Bool()))
     val dac_1_data  = IO(Output(UInt((2 * dacWidth).W)))
+    val dac_1_user  = IO(Output(UInt(2.W)))
 
     // dma -> dac IOs
     val dmain = IO(new DMAIO)
@@ -276,6 +277,10 @@ class Baseband(
     dac_0_user := streamOut.bits.user
     dac_0_valid := streamOut.valid
 
+    dac_1_data := streamOut.bits.data
+    dac_1_user := streamOut.bits.user
+    dac_1_valid := streamOut.valid
+
     m_axi_aresetn := s_axi_aresetn
 
     m_axi_awvalid := axiMaster.aw.valid
@@ -356,23 +361,39 @@ class Baseband(
     axiSlave.r.ready := s_axi_rready
 
     withClockAndReset(clock, reset) {
-      val enableTx = RegInit(false.B)
-      // unconditionally passthrough for now (setting enableTx will still disable)
-      dac_1_data := util.Cat(dmain_data(2), dmain_data(3))
-      dac_1_valid := false.B
-      when (enableTx) {
-        dmain.enable.foreach(_ := false.B)
-        dmain.valid.foreach(_ := false.B)
-        dmaout.valid_out.foreach(_ := false.B)
-        dmaout.dunf := false.B
-      } .otherwise {
-        dmaout <> dmain
+      val enableTx0 = RegInit(false.B)
+      val enableTx1 = RegInit(false.B)
+
+      // setting enableTx will disable
+      when (!enableTx0) {
         dac_0_data := util.Cat(dmain_data(0), dmain_data(1))
+        dac_0_valid := dmain.valid(0) || dmain.valid(1)
+      }
+
+      when (!enableTx1) {
+        dac_1_data := util.Cat(dmain_data(2), dmain_data(3))
+        dac_1_valid := dmain.valid(2) || dmain.valid(3)
+      }
+
+      dmaout <> dmain
+
+      when (enableTx0) {
+        // data/valid are set above, with the rest of the streaming interface stuff
+        dmain.enable.take(2).foreach(_ := false.B)
+        dmain.valid.take(2).foreach(_ := false.B)
+        dmaout.valid_out.take(2).foreach(_ := false.B)
+      }
+      when (enableTx1) {
+        dmain.enable.drop(2).foreach(_ := false.B)
+        dmain.valid.drop(2).foreach(_ := false.B)
+        dmaout.valid_out.drop(2).foreach(_ := false.B)
       }
 
       regmap.regmap(
-        0 * beatBytes -> Seq(RegField(1, enableTx,
-          RegFieldDesc("enableTx", "0 -> use built-in ADI TX, 1-> use custom baseband TX", volatile=false))),
+        0 * beatBytes -> Seq(RegField(1, enableTx0,
+          RegFieldDesc("enableTx0", "0 -> use built-in ADI TX, 1-> use custom baseband TX", volatile=false))),
+        1 * beatBytes -> Seq(RegField(1, enableTx1,
+          RegFieldDesc("enableTx1", "0 -> use built-in ADI TX, 1-> use custom baseband TX", volatile=false))),
       )
     }
   } }
