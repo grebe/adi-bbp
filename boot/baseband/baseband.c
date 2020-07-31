@@ -56,8 +56,20 @@
 #define SKID_WOVERFLOWED         (SKID_BASE + (0x4 << ADDRESS_SHIFT))
 #define SKID_DRAIN_WHEN_DISABLED (SKID_BASE + (0x5 << ADDRESS_SHIFT))
 
-// #define STREAM_OUT_BASE 0x0300
-// #define STREAM_OUT_SEL  (STREAM_OUT_BASE + (0x0 << ADDRESS_SHIFT))
+#define STREAM_OUT_BASE 0x0300
+#define STREAM_OUT_SEL  (STREAM_OUT_BASE + (0x0 << ADDRESS_SHIFT))
+
+#define TIME_RX_BASE 0x0400
+#define TIME_RX_AUTOCORR_FF (TIME_RX_BASE + (0x0 << ADDRESS_SHIFT))
+#define TIME_RX_PEAK_THRESHOLD (TIME_RX_BASE + (0x1 << ADDRESS_SHIFT))
+
+#define TX_SCHEDULER_BASE 0x0800
+
+#define SPLITTER_BASE 0x0900
+
+#define ENABLE_TX  0x0A00
+
+#define SCRATCHPAD_BASE 0x4000
 
 #define RAM_BASE 0x4000
 
@@ -73,6 +85,8 @@
 #define IOCTL_SCRATCH_WRITE                  9
 #define IOCTL_DMA_SCRATCH_TX                10
 // #define IOCTL_STREAM_OUT_SEL                11
+#define IOCTL_TX_ENABLE                     12
+#define IOCTL_RX_CONF                       13
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Paul Rigge");
@@ -478,6 +492,23 @@ static long baseband_ioctl(struct file *file, unsigned int cmd, unsigned long ar
     // case IOCTL_STREAM_OUT_SEL:
     //   iowrite32((u32)arg, baseband_registers + STREAM_OUT_SEL);
     //   break;
+
+    case IOCTL_TX_ENABLE:
+      // if arg > 1, we don't write, we just return the current value
+      // otherwise, we write and then return the current value
+      if (arg <= 0x1) {
+        iowrite32(arg, baseband_registers + ENABLE_TX);
+      }
+      return ioread32(baseband_registers + ENABLE_TX);
+
+    case IOCTL_RX_CONF:
+      kbuf = kmalloc(4 * 10, GFP_KERNEL);
+      copy_from_user(kbuf, (void*)arg, 4 * 10);
+      for (i = 0; i < 10; i++) {
+        iowrite32(kbuf[i], baseband_registers + TIME_RX_BASE + (i << ADDRESS_SHIFT));
+      }
+      kfree(kbuf);
+      break;
 
     default:
       return -ENOTTY;
