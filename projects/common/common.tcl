@@ -14,7 +14,7 @@ proc replace_tx {old new} {
   delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_valid_q0]]]
   delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_valid_i1]]]
   delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_valid_q1]]]
-  delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_dunf]]]
+  # delete_bd_objs [get_bd_nets -of_objects [find_bd_objs -relation connected_to [get_bd_pins $old/dac_dunf]]]
 
   # ADI's valid is really more of a ready signal...
   # Connect it to the AXI4-Stream ready for the dac
@@ -24,11 +24,15 @@ proc replace_tx {old new} {
   ad_connect $old/dac_valid_q0 uvl_dac_0/Op2
   ad_connect uvl_dac_0/Res $new/dac_0_ready
 
-  # Concatenate data into one AXI4-Stream interface with IQ
-  create_bd_cell -type ip -vlnv xilinx.com:ip:xlconcat:2.1 concat_dac_data_0
-  ad_connect $old/dac_data_i0 concat_dac_data_0/In0
-  ad_connect $old/dac_data_q0 concat_dac_data_0/In1
-  ad_connect concat_dac_data_0/dout $new/dac_0_bits
+  # Split a single AXI4-Stream interface with IQ into I and Q
+  create_bd_cell -type ip -vlnv xilinx.com:ip:xlslice:1.0 slice_dac_data_0_top
+  set_property -dict [list CONFIG.DIN_WIDTH {32} CONFIG.DIN_FROM {31} CONFIG.DIN_TO {16} CONFIG.DOUT_WIDTH {16}] [get_bd_cells slice_dac_data_0_top]
+  create_bd_cell -type ip -vlnv xilinx.com:ip:xlslice:1.0 slice_dac_data_0_bottom
+  set_property -dict [list CONFIG.DIN_WIDTH {32} CONFIG.DIN_FROM {15} CONFIG.DIN_TO {0} CONFIG.DOUT_WIDTH {16}] [get_bd_cells slice_dac_data_0_bottom]
+  ad_connect $new/dac_0_data slice_dac_data_0_top/Din
+  ad_connect $new/dac_0_data slice_dac_data_0_bottom/Din
+  ad_connect slice_dac_data_0_top/Dout $old/dac_data_i0
+  ad_connect slice_dac_data_0_bottom/Dout $old/dac_data_q0
 
   # ADI's valid is really more of a ready signal...
   # Connect it to the AXI4-Stream ready for the dac
@@ -38,13 +42,18 @@ proc replace_tx {old new} {
   ad_connect $old/dac_valid_q1 uvl_dac_1/Op2
   ad_connect uvl_dac_1/Res $new/dac_1_ready
 
-  # Concatenate data into one AXI4-Stream interface with IQ
-  create_bd_cell -type ip -vlnv xilinx.com:ip:xlconcat:2.1 concat_dac_data_1
-  ad_connect $old/dac_data_i1 concat_dac_data_1/In0
-  ad_connect $old/dac_data_q1 concat_dac_data_1/In1
-  ad_connect concat_dac_data_1/dout $new/dac_1_bits
-  ad_connect ${old}_dac_fifo/dout_unf $new/dma_dunf
-  ad_connect  $new/dac_dunf      $old/dac_dunf
+  # Split a single AXI4-Stream interface with IQ into I and Q
+  create_bd_cell -type ip -vlnv xilinx.com:ip:xlslice:1.0 slice_dac_data_1_top
+  set_property -dict [list CONFIG.DIN_WIDTH {32} CONFIG.DIN_FROM {31} CONFIG.DIN_TO {16} CONFIG.DOUT_WIDTH {16}] [get_bd_cells slice_dac_data_1_top]
+  create_bd_cell -type ip -vlnv xilinx.com:ip:xlslice:1.0 slice_dac_data_1_bottom
+  set_property -dict [list CONFIG.DIN_WIDTH {32} CONFIG.DIN_FROM {15} CONFIG.DIN_TO {0} CONFIG.DOUT_WIDTH {16}] [get_bd_cells slice_dac_data_1_bottom]
+  ad_connect $new/dac_1_data slice_dac_data_1_top/Din
+  ad_connect $new/dac_1_data slice_dac_data_1_bottom/Din
+  ad_connect slice_dac_data_1_top/Dout $old/dac_data_i1
+  ad_connect slice_dac_data_1_bottom/Dout $old/dac_data_q1
+
+  # ad_connect ${old}_dac_fifo/dout_dunf $new/dmain_dunf
+  # ad_connect  $new/dmaout_dunf      $old/dac_dunf
 
   # Connect the old DMA interface
   # It operates as passthrough unless a register is set, in which case
@@ -76,8 +85,8 @@ proc replace_tx {old new} {
   ad_connect $old/dac_valid_i1  $new/dmaout_valid_2
   ad_connect $old/dac_valid_q1  $new/dmaout_valid_3
 
-  ad_connect ${old}_dac_fifo/dout_unf $new/dmain_dunf
-  ad_connect $new/dmaout_dunf $old/dac_dunf
+  # ad_connect ${old}_dac_fifo/dout_unf $new/dmain_dunf
+  # ad_connect $new/dmaout_dunf $old/dac_dunf
 }
 
 proc add_rx {old new} {
@@ -115,16 +124,15 @@ proc make_baseband {base_address} {
   ad_cpu_interconnect $base_address Baseband
   ad_mem_hp3_interconnect sys_cpu_clk sys_ps7/S_AXI_HP3
   ad_mem_hp3_interconnect sys_cpu_clk Baseband/m_axi
-  # ad_mem_hp0_interconnect sys_cpu_clk Baseband/m_axi
 }
 
 proc add_ila {} {
 
-  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_aw.*]
-  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_ar.*]
-  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_r.*]
-  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_w.*]
-  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_b.*]
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_aw.*]
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_ar.*]
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_r.*]
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_w.*]
+  set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_b.*]
 
   # set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_aw.*]
   # set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_ar.*]
@@ -167,13 +175,19 @@ proc update_bd {} {
 }
 
 proc make_targets {sources} {
+  set_property synth_checkpoint_mode Hierarchical [get_files $sources/bd/system/system.bd]
   generate_target {synthesis implementation} [get_files $sources/bd/system/system.bd]
+  export_ip_user_files -of_objects [get_files $sources/bd/system/system.bd]
+  create_ip_run [get_files $sources/bd/system/system.bd]
   make_wrapper -files [get_files $sources/bd/system/system.bd] -top
   import_files -force -norecurse -fileset sources_1 $sources/bd/system/hdl/system_wrapper.v
+  if {[file exists ./reference.dcp]} {
+    set_property incremental_checkpoint ./reference.dcp [get_runs impl_1]
+  }
 }
 
 proc project_run_synth {project_name} {
-  launch_runs synth_1
+  launch_runs -jobs 8 system_*_synth_1 synth_1
   wait_on_run synth_1
   open_run synth_1
   report_timing_summary -file timing_synth.log

@@ -21,15 +21,14 @@ LIB_DEPS += axi_clkgen
 LIB_DEPS += axi_dmac
 LIB_DEPS += axi_hdmi_tx
 LIB_DEPS += axi_spdif_tx
+LIB_DEPS += axi_sysid
+LIB_DEPS += sysid_rom
 LIB_DEPS += util_pack/util_cpack2
 LIB_DEPS += util_pack/util_upack2
-LIB_DEPS += util_rfifo
 LIB_DEPS += util_rfifo
 LIB_DEPS += util_tdd_sync
 LIB_DEPS += util_wfifo
 LIB_DEPS += xilinx/util_clkdiv
-LIB_DEPS += axi_sysid
-LIB_DEPS += sysid_rom
 
 include $(ADI_HDL_DIR)/projects/scripts/project-xilinx.mk
 
@@ -53,8 +52,8 @@ M_FLIST += *.ioplanning
 M_FLIST += *.ltx
 M_FLIST += .Xil
 
-.PHONY: all lib clean clean-all
-all: lib ../../ip/baseband.xpr zc706.sdk/system_top.hdf
+.PHONY: all clean clean-all
+all: ../../ip/baseband.xpr zc706.sdk/system_top.hdf
 
 ../../ip/baseband.xpr:
 	make -C ../../ip/
