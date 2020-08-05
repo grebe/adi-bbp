@@ -389,11 +389,16 @@ class Baseband(
         dmaout.valid_out.drop(2).foreach(_ := false.B)
       }
 
+      val dummy = RegInit(0.U(32.W))
+
       regmap.regmap(
         0 * beatBytes -> Seq(RegField(1, enableTx0,
           RegFieldDesc("enableTx0", "0 -> use built-in ADI TX, 1-> use custom baseband TX", volatile=false))),
         1 * beatBytes -> Seq(RegField(1, enableTx1,
           RegFieldDesc("enableTx1", "0 -> use built-in ADI TX, 1-> use custom baseband TX", volatile=false))),
+        2* beatBytes -> Seq(RegField(32, dummy + 1.U, dummy, Some(RegFieldDesc(
+          name = "dummy", desc = "A dummy register that reads what you write plus 1",
+        ))))
       )
     }
   } }
