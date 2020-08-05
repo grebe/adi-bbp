@@ -87,6 +87,7 @@
 // #define IOCTL_STREAM_OUT_SEL                11
 #define IOCTL_TX_ENABLE                     12
 #define IOCTL_RX_CONF                       13
+#define IOCTL_TEST_PLUS_ONE                 14
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Paul Rigge");
@@ -496,10 +497,17 @@ static long baseband_ioctl(struct file *file, unsigned int cmd, unsigned long ar
     case IOCTL_TX_ENABLE:
       // if arg > 1, we don't write, we just return the current value
       // otherwise, we write and then return the current value
-      if (arg <= 0x1) {
-        iowrite32(arg, baseband_registers + ENABLE_TX);
+      for (i = 0; i < 2; i++) {
+        iowrite32((arg >> i) & 0x1, baseband_registers + ENABLE_TX + (i << ADDRESS_SHIFT));
       }
-      return ioread32(baseband_registers + ENABLE_TX);
+      // get the status and return it
+      arg = 0;
+      for (i = 0; i < 2; i++) {
+        if (ioread32(baseband_registers + ENABLE_TX + (i << ADDRESS_SHIFT))) {
+          arg |= (1 << i);
+        }
+      }
+      return arg;
 
     case IOCTL_RX_CONF:
       kbuf = kmalloc(4 * 10, GFP_KERNEL);
@@ -509,6 +517,10 @@ static long baseband_ioctl(struct file *file, unsigned int cmd, unsigned long ar
       }
       kfree(kbuf);
       break;
+
+    case IOCTL_TEST_PLUS_ONE:
+      iowrite32(arg, baseband_registers + ENABLE_TX + (0x2 << ADDRESS_SHIFT));
+      return ioread32(baseband_registers + ENABLE_TX + (0x2 << ADDRESS_SHIFT));
 
     default:
       return -ENOTTY;
@@ -587,6 +599,7 @@ err_device_create:
 err_class_create:
   unregister_chrdev_region(dev, 1);
 err_pre_alloc:
+  printk(KERN_INFO "Probe did not succeed");
   return rc;
 }
 
