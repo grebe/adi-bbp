@@ -1,6 +1,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -10,50 +11,15 @@
 #define IOCTL_STREAM_ALIGNER_CNT            2
 #define IOCTL_STREAM_ALIGNER_CNTPASSTHROUGH 3
 #define IOCTL_STREAM_ALIGNER_EN             4
-#define IOCTL_PALLOC                        5
-#define IOCTL_PFREE                         6
-
-const char mem_name[] = "/dev/mem";
-static int mem_fd = 0;
-static volatile uint32_t *volatile baseband_regs = NULL;
-static uint64_t paddr;
-
-void init_mem(void)
-{
-  mem_fd = open(mem_name, O_RDWR | O_SYNC);
-  if (mem_fd < 0) {
-    fprintf(stderr, "Error opening mem");
-  }
-}
-
-void init_baseband(void)
-{
-  if (mem_fd == 0) {
-    init_mem();
-  }
-  baseband_regs = mmap(NULL, 0x10000, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0x79040000);
-  if (baseband_regs == MAP_FAILED) {
-    fprintf(stderr, "Error mmapping baseband_regs");
-  }
-}
-
-void *palloc(int fd, size_t size)
-{
-  void *ptr;
-  paddr = ioctl(fd, IOCTL_PALLOC, size);
-  printf("Addr = %lld\n", paddr);
-  ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, paddr);
-  if (ptr == MAP_FAILED) {
-    fprintf(stderr, "Error mmapping /dev/mem\n");
-  }
-  return ptr;
-}
-
-void pfree(int fd)
-{
-  ioctl(fd, IOCTL_PFREE, paddr);
-  paddr = 0;
-}
+#define IOCTL_SKID_OVERFLOWED               5
+#define IOCTL_SKID_SET_OVERFLOW             6
+#define IOCTL_DMA_SET_CYCLE                 7
+#define IOCTL_SCRATCH_READ                  8
+#define IOCTL_SCRATC_WRITE                  9
+#define IOCTL_DMA_SCRATCH_TX               10
+#define IOCTL_TX_ENABLE                    12
+#define IOCTL_RX_CONF                      13
+#define IOCTL_TEST_PLUS_ONE                14
 
 void set_maxcnt(int fd, uint64_t cnt)
 {
@@ -69,72 +35,100 @@ void set_cnt_passthrough(int fd, uint32_t passthrough)
   }
 }
 
-void set_align_en(int fd, bool en)
+void set_align_en(int fd, uint8_t en)
 {
   if (ioctl(fd, IOCTL_STREAM_ALIGNER_EN, en != 0) < 0) {
     fprintf(stderr, "ALIGNER EN IOCTL ERROR\n");
   }
 }
 
+int get_skid_overflowed(int fd)
+{
+  return ioctl(fd, IOCTL_SKID_OVERFLOWED, 0);
+}
+
+void set_skid_overflowed(int fd, uint8_t o)
+{
+  if (ioctl(fd, IOCTL_SKID_SET_OVERFLOW, o) < 0) {
+    fprintf(stderr, "SKID OVERFLOW SET ERROR\n");
+  }
+}
+
+void tx_enable(int fd, uint32_t mask) {
+  if (ioctl(fd, IOCTL_TX_ENABLE, mask) != mask) {
+    fprintf(stderr, "ERROR SETTING TX ENABLE\n");
+  }
+}
+
+void test_bb(int fd) {
+  uint32_t i, j;
+  for (i = 0; i < 30; i++) {
+    if ((j = ioctl(fd, IOCTL_TEST_PLUS_ONE, i)) != i + 1) {
+      fprintf(stderr, "TEST IOCTL FAILED: wrote %u, read %u\n", i, j);
+    }
+  }
+}
+
 int main(int argc, const char* argv[])
 {
   const char *baseband_file_name = "/dev/baseband";
-  uint32_t *s2m, i;
+  uint32_t *s2m, *m2s, i;
   int fd;
   fd = open(baseband_file_name, O_RDWR);
   if (fd == -1) {
     fprintf(stderr, "OPENING FILE ERROR\n");
     return -1;
   }
-  // init_mem();
-  // init_baseband();
 
-  // uint32_t *buf = NULL; // palloc(fd, 64);
+  test_bb(fd);
 
-  // buf[0] = 10;
-  // buf[1] = 20;
-
-  // set_maxcnt(fd, 53);
-  // set_maxcnt(fd, 55);
-  set_maxcnt(fd, 57);
-  set_cnt_passthrough(fd, 1);
+  const uint64_t maxcnt = 4096; //1024;
+  set_maxcnt(fd, maxcnt);
   // set_cnt_passthrough(fd, 0);
-  // set_cnt_passthrough(fd, 1);
-
-  // baseband_regs[0x40 + 0x3] = 52;
-  // __sync_synchronize();
-  // baseband_regs[0x40 + 0x4] = 1;
-  // baseband_regs[0x40 + 0x0] = 1;
-  // __sync_synchronize();
-
-  // baseband_regs[0x0 + 0x10] = paddr;
-  // baseband_regs[0x0 + 0x5] = 100 * 4;
-  // printf("%lu\n", baseband_regs[0x0 + 0x5]);
-  // baseband_regs[0x0 + 0x18] = 0;
-  // baseband_regs[0x0 + 0x1C] = 0;
-  // baseband_regs[0x0 + 0x0] = 1;
-  // baseband_regs[0x0 + 0x20] = 0;
-
-  // __sync_synchronize();
-
-  // while(!baseband_regs[0x0 + 0x4]) {
-  // }
-
-  // for (i = 0; i < 100; i++) {
-  //   printf("%d: %d\n", i, buf[i]);
-  // }
-  // set_maxcnt(fd, 53);
-  // set_cnt_passthrough(fd, 1);
-
-  s2m = mmap(NULL, 100 * sizeof(uint32_t), PROT_READ, MAP_SHARED, fd, 0);
-
-  for (i = 0; i < 100; i++) {
-    printf("%d: %d\n", i, s2m[i]);
+  set_cnt_passthrough(fd, 1);
+  set_align_en(fd, 0);
+  tx_enable(fd, 0x3);
+  if (get_skid_overflowed(fd)) {
+    fprintf(stderr, "WARNING: skid had overflowed previously\n");
+    set_skid_overflowed(fd, 0);
+  }
+  if (get_skid_overflowed(fd)) {
+    fprintf(stderr, "WARNING: skid still overflowing\n");
   }
 
-  // munmap(s2m, 100 * sizeof(uint32_t));
+  const uint64_t num_samples = 12 * 1024 * 1024;
+  int read_result;
+  s2m = malloc(num_samples * sizeof(uint32_t));
+  // write(fd, s2m, 1024 * sizeof(uint32_t));
+  read_result = read(fd, s2m, num_samples * sizeof(uint32_t));
+  if (read_result != num_samples * sizeof(uint32_t)) {
+    fprintf(stderr, "bad read: %d\n", read_result);
+  }
 
-  // pfree(fd);
+  if (get_skid_overflowed(fd)) {
+    fprintf(stderr, "WARNING: Got skid overflow during read\n");
+  }
+
+  const int verbose = 1;
+  int16_t real, imag;
+  int numwarn = 0;
+  for (i = 0; i < num_samples - 1; i++) {
+    if (s2m[i] != i % maxcnt && !verbose) {
+      fprintf(stderr, "WARNING: index %d was %d\n", i, s2m[i]);
+      numwarn++;
+    } else if (verbose) {
+      real = s2m[i] & 0xFFFF;
+      imag = (s2m[i] >> 16) & 0xFFFF;
+      fprintf(stderr, "%d: %d + i %d\n", i, real, imag);
+      numwarn++;
+    }
+    if (numwarn > 15) {
+      if (!verbose) { fprintf(stderr, "TOO MANY WARNINGS\n"); }
+      break;
+    }
+  }
+
+
   close(fd);
   puts("That's all, folks!\n");
   return 0;
