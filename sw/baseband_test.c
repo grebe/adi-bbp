@@ -17,9 +17,11 @@
 #define IOCTL_SCRATCH_READ                  8
 #define IOCTL_SCRATC_WRITE                  9
 #define IOCTL_DMA_SCRATCH_TX               10
+#define IOCTL_STREAM_OUT_SEL               11
 #define IOCTL_TX_ENABLE                    12
 #define IOCTL_RX_CONF                      13
 #define IOCTL_TEST_PLUS_ONE                14
+#define IOCTL_RX_USE_BASEBAND              15
 
 void set_maxcnt(int fd, uint64_t cnt)
 {
@@ -60,6 +62,13 @@ void tx_enable(int fd, uint32_t mask) {
   }
 }
 
+void set_baseband_enable(int fd, uint8_t en)
+{
+  if (ioctl(fd, IOCTL_RX_USE_BASEBAND, en) < 0) {
+    fprintf(stderr, "RX USE BASEBAND IOCTL ERROR\n");
+  }
+}
+
 void test_bb(int fd) {
   uint32_t i, j;
   for (i = 0; i < 30; i++) {
@@ -80,13 +89,14 @@ int main(int argc, const char* argv[])
     return -1;
   }
 
-  test_bb(fd);
+  // test_bb(fd);
 
   const uint64_t maxcnt = 4096; //1024;
   set_maxcnt(fd, maxcnt);
   // set_cnt_passthrough(fd, 0);
   set_cnt_passthrough(fd, 1);
   set_align_en(fd, 0);
+  set_baseband_enable(fd, 0); // bypass bb, stream goes directly to DMA
   tx_enable(fd, 0x3);
   if (get_skid_overflowed(fd)) {
     fprintf(stderr, "WARNING: skid had overflowed previously\n");

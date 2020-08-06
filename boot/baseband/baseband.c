@@ -65,7 +65,9 @@
 
 #define TX_SCHEDULER_BASE 0x0800
 
-#define SPLITTER_BASE 0x0900
+#define SPLITTER_BASE       0x0900
+#define SPLITTER_BB_SEL     (SPLITTER_BASE + (0x0 << ADDRESS_SHIFT))
+#define SPLITTER_BYPASS_SEL (SPLITTER_BASE + (0x1 << ADDRESS_SHIFT))
 
 #define ENABLE_TX  0x0A00
 
@@ -84,10 +86,12 @@
 #define IOCTL_SCRATCH_READ                   8
 #define IOCTL_SCRATCH_WRITE                  9
 #define IOCTL_DMA_SCRATCH_TX                10
-// #define IOCTL_STREAM_OUT_SEL                11
+#define IOCTL_STREAM_OUT_SEL                11
 #define IOCTL_TX_ENABLE                     12
 #define IOCTL_RX_CONF                       13
 #define IOCTL_TEST_PLUS_ONE                 14
+#define IOCTL_RX_USE_BASEBAND               15
+
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Paul Rigge");
@@ -490,9 +494,8 @@ static long baseband_ioctl(struct file *file, unsigned int cmd, unsigned long ar
       iowrite32(0, baseband_registers + DMA_M2S_WGO_RREMAINING);
       break;
 
-    // case IOCTL_STREAM_OUT_SEL:
-    //   iowrite32((u32)arg, baseband_registers + STREAM_OUT_SEL);
-    //   break;
+    case IOCTL_STREAM_OUT_SEL:
+      return -ENOTTY;
 
     case IOCTL_TX_ENABLE:
       // if arg > 1, we don't write, we just return the current value
@@ -521,6 +524,38 @@ static long baseband_ioctl(struct file *file, unsigned int cmd, unsigned long ar
     case IOCTL_TEST_PLUS_ONE:
       iowrite32(arg, baseband_registers + ENABLE_TX + (0x2 << ADDRESS_SHIFT));
       return ioread32(baseband_registers + ENABLE_TX + (0x2 << ADDRESS_SHIFT));
+
+    case IOCTL_RX_USE_BASEBAND:
+      // This ioctl chooses between two configurations:
+      //   1) baseband enabled, in which case the input streams through the RX
+      //      before going into the DMA.
+      //   2) baseband disabled, in which case the baseband is bypassed and raw
+      //      samples go directly to the DMA.
+      //
+      // There are 3 important blocks, depicted below:
+      //                          +------------+
+      //                          |            |
+      //    +----------------+    |  Baseband  |    +------------+
+      //    |                +--->+            +--->+            |
+      // +->+  Splitter Mux  |    +------------+    | Input Mux  +->
+      //    |                +--------------------->+            |
+      //    +----------------+                      +------------+
+      //
+      // Both the splitter and input muxes need to be set correctly.
+      //
+      // Confusingly, some of the registers are encoded differently than arg.
+      // arg -> 0 means bypass the baseband, arg -> 1 means use the baseband.
+
+      if (arg) {
+        iowrite32(1, baseband_registers + SPLITTER_BYPASS_SEL); // disable bypass in splitter
+        iowrite32(0, baseband_registers + STREAM_OUT_SEL);      // choose bb input
+        iowrite32(0, baseband_registers + SPLITTER_BB_SEL);     // enable bb in splitter
+      } else {
+        iowrite32(1, baseband_registers + SPLITTER_BB_SEL);     // disable bb in splitter
+        iowrite32(1, baseband_registers + STREAM_OUT_SEL);      // choose bypass input
+        iowrite32(0, baseband_registers + SPLITTER_BYPASS_SEL); // enable bypass in splitter
+      }
+      break;
 
     default:
       return -ENOTTY;
