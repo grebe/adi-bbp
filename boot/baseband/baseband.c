@@ -37,8 +37,8 @@
 #define DMA_AWPROT             (DMA_BASE + (0xF << ADDRESS_SHIFT))
 #define DMA_ARCACHE            (DMA_BASE + (0x10 << ADDRESS_SHIFT))
 #define DMA_AWCACHE            (DMA_BASE + (0x11 << ADDRESS_SHIFT))
-#define DMA_BYTES_READ         (DMA_BASE + (0x12 << ADDRESS_SHIFT))
-#define DMA_BYTES_WRITTEN      (DMA_BASE + (0x13 << ADDRESS_SHIFT))
+// #define DMA_BYTES_READ         (DMA_BASE + (0x12 << ADDRESS_SHIFT))
+// #define DMA_BYTES_WRITTEN      (DMA_BASE + (0x13 << ADDRESS_SHIFT))
 
 
 #define STREAM_ALIGNER_BASE           0x100
@@ -140,14 +140,13 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
   void *kbuf;
   dma_addr_t dbuf;
   int err;
-  u32 begin_bytes_written, current_bytes_written;
+  // u32 begin_bytes_written, current_bytes_written;
   struct timespec init_time, current_time;
   u64 max_time, sec_diff, nsec_diff;
 
   kbuf = dma_alloc_coherent(&baseband_dev, size, &dbuf, GFP_KERNEL);
   max_time = estimate_max_time(size);
-  pr_err("Max time = %lld\n", max_time);
-  begin_bytes_written = ioread32(baseband_registers + DMA_BYTES_WRITTEN);
+  pr_err("Max time = %lld ns\n", max_time);
 
   if (kbuf == NULL) {
     pr_err("Could not kmalloc");
@@ -167,6 +166,8 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
   // iowrite32(0, baseband_registers + DMA_S2M_CYCLES);
   // iowrite32(0, baseband_registers + DMA_S2M_FIXED);
 
+  // begin_bytes_written = ioread32(baseband_registers + DMA_BYTES_WRITTEN);
+
   // disable aligner, will turn back on after dma enabled
   iowrite32(0, baseband_registers + STREAM_ALIGNER_EN);
   // flush the queues in front of the dma by disabling the skid
@@ -178,10 +179,11 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
   }
   // wait for things to flush
   udelay(10);
-  // start the dma engine
-  iowrite32(0, baseband_registers + DMA_S2M_WGO_RREMAINING);
-  // enable the dma, skid, and aligner to feed the dma
+  // enable the dma
   iowrite32(1, baseband_registers + DMA_EN);
+  // start the dma operation
+  iowrite32(1, baseband_registers + DMA_S2M_WGO_RREMAINING);
+  // enable the skid, and aligner to feed the dma
   iowrite32(1, baseband_registers + SKID_EN);
   iowrite32(1, baseband_registers + STREAM_ALIGNER_EN);
 
@@ -193,9 +195,9 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
 #endif /* BASEBAND_DEBUG */
 
   while (
-      ( (current_bytes_written = ioread32(baseband_registers + DMA_BYTES_WRITTEN)) - begin_bytes_written) < size - 4
-      // ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING) != 0 &&
-      // ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING) != 0
+      // ( (current_bytes_written = ioread32(baseband_registers + DMA_BYTES_WRITTEN)) - begin_bytes_written) < size - 4
+      ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING) != 0 ||
+      ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING) != 0
       ) {
   // while (!ioread32(baseband_registers + DMA_IDLE)) {
     // ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING) != 0) { // && wait_cnt < 1000000) {
@@ -207,6 +209,8 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
     nsec_diff += sec_diff * 1000000000;
     if (nsec_diff >= max_time) {
       pr_err("TIMEOUT: waited %lld ns\n", nsec_diff);
+      // pr_err("         got %u, needed %u\n", current_bytes_written - begin_bytes_written, size - 4);
+      err = -EFAULT;
       goto err_dma_timeout;
     }
     // pr_err("REMAINING = %d\n", ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING));
@@ -228,6 +232,7 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
   rmb();
   if (copy_to_user(user_buffer, kbuf, size)) {
     err = -EFAULT;
+    pr_err("Error copying to user buffer");
     goto err_copy;
   }
 
@@ -237,7 +242,6 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
 
 err_dma_timeout:
   pr_err("DMA Timeout");
-  err = -EFAULT;
 err_copy:
   dma_free_coherent(&baseband_dev, size, kbuf, dbuf);
 err_alloc:
@@ -425,7 +429,7 @@ static long baseband_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 #endif /* BASEBAND_DEBUG */
 
 #ifdef BASEBAND_DEBUG
-  printk(KERN_INFO "Handling ioctl\n");
+  printk(KERN_INFO "Handling ioctl %u\n", cmd);
 #endif /* BASEBAND_DEBUG */
   switch (cmd) {
     case IOCTL_STREAM_ALIGNER_MAXCNT:
