@@ -92,7 +92,7 @@ class FixedPointRepresentation(object):
 class BasebandTB(object):
     def __init__(self, dut, debug=False):
         self.dut = dut
-        self.csrBase = 0x79400000
+        self.csrBase = 0x79040000
         self.stream_in = STDriver(dut, "adc_0", dut.clock, big_endian=False, **stream_names)
         self.csr = MemMaster(dut, "s_axi", dut.s_axi_aclk, **lower_axil)
         self.memory = np.arange(1024 * 1024 * 1024, dtype=np.dtype('b'))
@@ -220,23 +220,29 @@ class BasebandTB(object):
 
     @cocotb.coroutine
     def set_input_splitter_mux(self, base = 0x900):
-        #if base < 0x70000000:
-        #    base = base + self.csrBase
+        if base < 0x70000000:
+            base = base + self.csrBase
         yield self.csr.write(base, 0)
 
     @cocotb.coroutine
     def set_input_stream_mux(self, base = 0x300):
+        if base < 0x70000000:
+            base = base + self.csrBase
         yield self.csr.write(base, 0)
         # yield self.csr.write(base + 4, 0)
 
     @cocotb.coroutine
     def set_schedule(self, base=0x800, *, length, time):
+        if base < 0x70000000:
+            base = base + self.csrBase
         yield self.csr.write(base, length)
         yield self.csr.write(base + 0x4, time)
         yield self.csr.write(base + 0xC, 1) # go!
 
     @cocotb.coroutine
     def set_timerx(self, base=0x400, **kwargs):
+        if base < 0x70000000:
+            base = base + self.csrBase
         settings = {
             'autocorrFF': 0.9,
             'peakThreshold': 0.05,
@@ -303,6 +309,8 @@ class BasebandTB(object):
 
     @cocotb.coroutine
     def handle_packet_detect(self, *, base = 0x400):
+        if base < 0x70000000:
+            base = base + self.csrBase
         while True:
             # check if an interrupt has fired
             if not self.dut.skid_ints_0.value:
@@ -317,11 +325,11 @@ class BasebandTB(object):
         self.dut.reset <= 1
         self.dut.s_axi_aresetn <= 0
         self.stream_in.bus.TVALID <= 0
-        for i in range(duration):
-            yield RisingEdge(self.dut.clock)
+        yield ClockCycles(self.dut.clock, duration)
         self.dut.reset <= 0
         yield RisingEdge(self.dut.s_axi_aclk)
         self.dut.s_axi_aresetn <= 1
+        self.dut.s_axi_awprot <= 0
         self.dut.dac_0_ready <= 1
         self.dut.dac_1_ready <= 1
         self.dut._log.debug("Setting registers to drain input streams")

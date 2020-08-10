@@ -63,12 +63,12 @@ class Baseband(
 
   val sAxiIsland = LazyModule(new CrossingWrapper(AsynchronousCrossing(safe=true)) with HasAXI4StreamCrossing)
   val dma = sAxiIsland { LazyModule(new StreamingAXI4DMAWithCSR(csrAddress = csrAddress, beatBytes = beatBytes)) }
-  val timeRx = sAxiIsland { LazyModule(new AXI4TimeDomainRXBlock(rxParams, AddressSet(0x79400400, 0x3FF))) }
+  val timeRx = sAxiIsland { LazyModule(new AXI4TimeDomainRXBlock(rxParams, AddressSet(0x79040400, 0x3FF))) }
   val freqRx = DspContext.alter(context) {
     sAxiIsland { LazyModule(new AXI4FreqDomainRXBlock(rxParams)) }
   }
-  val txScheduler = sAxiIsland { LazyModule(new TimeGate(AddressSet(0x79400800L, 0xFF))) }// , counter = Some(timeRx.rx.globalCycleCounter))) }
-  val (inputStreamMux, inputStreamMuxMem) = sAxiIsland { StreamMux.axi(AddressSet(0x79400300L, 0xFF), beatBytes = beatBytes) }
+  val txScheduler = sAxiIsland { LazyModule(new TimeGate(AddressSet(0x79040800L, 0xFF))) }// , counter = Some(timeRx.rx.globalCycleCounter))) }
+  val (inputStreamMux, inputStreamMuxMem) = sAxiIsland { StreamMux.axi(AddressSet(0x79040300L, 0xFF), beatBytes = beatBytes) }
   val (splitter, splitterMem) = sAxiIsland { StreamMux.axi(AddressSet(0x79040900L, 0xFF), beatBytes = beatBytes) }
   val regmap = AXI4RegisterNode(AddressSet(0x79040A00L, 0xFF), beatBytes = beatBytes)
 
