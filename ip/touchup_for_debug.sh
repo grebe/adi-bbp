@@ -21,3 +21,7 @@ sed -i 's/\(output.*auto_stream_in.*ready\)/(\* MARK_DEBUG = "TRUE", DONT_TOUCH 
 sed -i 's/\(input.*auto_stream_in.*valid\)/(\* MARK_DEBUG = "TRUE", DONT_TOUCH = "TRUE" \*)\n  \1/' $1
 sed -i 's/\(input.*auto_stream_out.*ready\)/(\* MARK_DEBUG = "TRUE", DONT_TOUCH = "TRUE" \*)\n  \1/' $1
 sed -i 's/\(output.*auto_stream_out.*valid\)/(\* MARK_DEBUG = "TRUE", DONT_TOUCH = "TRUE" \*)\n  \1/' $1
+# sed -i 's/\(output.*auto_stream_in.*bits\)/(\* MARK_DEBUG = "TRUE", DONT_TOUCH = "TRUE" \*)\n  \1/' $1
+sed -i 's/\(input.*auto_stream_in.*bits\)/(\* MARK_DEBUG = "TRUE", DONT_TOUCH = "TRUE" \*)\n  \1/' $1
+# sed -i 's/\(input.*auto_stream_out.*bits\)/(\* MARK_DEBUG = "TRUE", DONT_TOUCH = "TRUE" \*)\n  \1/' $1
+sed -i 's/\(output.*auto_stream_out.*bits\)/(\* MARK_DEBUG = "TRUE", DONT_TOUCH = "TRUE" \*)\n  \1/' $1
