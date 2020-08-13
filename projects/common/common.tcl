@@ -93,14 +93,14 @@ proc add_rx {old new} {
   # connect adc output to replacement block
   ad_connect  $old/adc_valid_i0 $new/adc_0_valid
   create_bd_cell -type ip -vlnv xilinx.com:ip:xlconcat:2.1 concat_adc_data_0
-  ad_connect  $old/adc_data_i0  concat_adc_data_0/In0
-  ad_connect  $old/adc_data_q0  concat_adc_data_0/In1
+  ad_connect  $old/adc_data_i0  concat_adc_data_0/In1
+  ad_connect  $old/adc_data_q0  concat_adc_data_0/In0
   ad_connect  concat_adc_data_0/dout $new/adc_0_data
 
   ad_connect  $old/adc_valid_i1 $new/adc_1_valid
   create_bd_cell -type ip -vlnv xilinx.com:ip:xlconcat:2.1 concat_adc_data_1
-  ad_connect  $old/adc_data_i1  concat_adc_data_1/In0
-  ad_connect  $old/adc_data_q1  concat_adc_data_1/In1
+  ad_connect  $old/adc_data_i1  concat_adc_data_1/In1
+  ad_connect  $old/adc_data_q1  concat_adc_data_1/In0
   ad_connect  concat_adc_data_1/dout $new/adc_1_data
 
   # ad_connect  $old/adc_valid_q0 $new/adc_valid_q0
@@ -116,7 +116,7 @@ proc add_clock_and_reset {old new} {
 proc update_rxtx {old new} {
     add_clock_and_reset $old $new
     add_rx $old $new
-    # replace_tx $old $new
+    replace_tx $old $new
 }
 
 proc make_baseband {base_address} {
@@ -133,6 +133,18 @@ proc add_ila {} {
   set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_r.*]
   set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_w.*]
   set_property mark_debug true [get_nets -hier -regexp .*/baseband/s_axi_b.*]
+
+  # set_property -quiet mark_debug true [get_nets -hier -regexp .*/sAxiIsland/x1/auto_stream.*valid]
+  # set_property -quiet mark_debug true [get_nets -hier -regexp .*/sAxiIsland/x1/auto_stream.*ready]
+  # set_property -quiet mark_debug true [get_nets -hier -regexp .*/sAxiIsland/x2/auto_stream.*valid]
+  # set_property -quiet mark_debug true [get_nets -hier -regexp .*/sAxiIsland/x2/auto_stream.*ready]
+  # set_property -quiet mark_debug true [get_nets -hier -regexp .*/sAxiIsland/x3/auto_stream.*valid]
+  # set_property -quiet mark_debug true [get_nets -hier -regexp .*/sAxiIsland/x3/auto_stream.*ready]
+  # set_property -quiet mark_debug true [get_nets -hier -regexp .*/sAxiIsland/dma/auto_.*stream.*valid]
+  # set_property -quiet mark_debug true [get_nets -hier -regexp .*/baseband/sAxiIsland/dma/auto_.*stream.*ready]
+
+  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/adc_0.*]
+  # set_property mark_debug true [get_nets -hier -regexp .*/baseband/dac_0.*]
 
   # set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_aw.*]
   # set_property mark_debug true [get_nets -hier -regexp .*/baseband/m_axi_ar.*]
