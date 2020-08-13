@@ -8,8 +8,10 @@
 #include <linux/kdev_t.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/of_address.h>
 #include <linux/of_device.h>
+#include <linux/semaphore.h>
 #include <linux/slab.h>
 #include <linux/time.h>
 #include <linux/uaccess.h>
@@ -116,6 +118,9 @@ static struct class* cl;
 static dev_t dev;
 
 static struct device baseband_dev;
+static bool baseband_rx_enabled;
+
+DEFINE_MUTEX(baseband_rx_lock);
 
 static int baseband_open(struct inode *inode, struct file *file)
 {
@@ -166,7 +171,8 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
   // iowrite32(0, baseband_registers + DMA_S2M_CYCLES);
   // iowrite32(0, baseband_registers + DMA_S2M_FIXED);
 
-  // begin_bytes_written = ioread32(baseband_registers + DMA_BYTES_WRITTEN);
+  // lock the baseband config, we're doing stuff with it
+  mutex_lock(&baseband_rx_lock);
 
   // disable aligner, will turn back on after dma enabled
   iowrite32(0, baseband_registers + STREAM_ALIGNER_EN);
@@ -219,6 +225,8 @@ static int baseband_read(struct file *file, char __user *user_buffer, size_t siz
   iowrite32(0, baseband_registers + SKID_EN);
   // also disable aligner
   iowrite32(0, baseband_registers + STREAM_ALIGNER_EN);
+
+  mutex_unlock(&baseband_rx_lock);
 
 #ifdef BASEBAND_DEBUG
   printk(KERN_INFO "remaining = %d\n", ioread32(baseband_registers + DMA_S2M_WGO_RREMAINING));
@@ -296,7 +304,7 @@ static int baseband_write(
 
   wait_cnt = 0;
   while (
-      ioread32(baseband_registers + DMA_M2S_WGO_RREMAINING) != 0 &&
+      ioread32(baseband_registers + DMA_M2S_WGO_RREMAINING) != 0 ||
       ioread32(baseband_registers + DMA_M2S_WGO_RREMAINING) != 0
       ) {
     udelay(1);
@@ -517,11 +525,18 @@ static long baseband_ioctl(struct file *file, unsigned int cmd, unsigned long ar
       return arg;
 
     case IOCTL_RX_CONF:
-      kbuf = kmalloc(4 * 10, GFP_KERNEL);
-      copy_from_user(kbuf, (void*)arg, 4 * 10);
-      for (i = 0; i < 10; i++) {
+      // lock the rx configuration
+      mutex_lock(&baseband_rx_lock);
+
+      kbuf = kmalloc(4 * 11, GFP_KERNEL);
+      copy_from_user(kbuf, (void*)arg, 4 * 11);
+      for (i = 0; i < 11; i++) {
         iowrite32(kbuf[i], baseband_registers + TIME_RX_BASE + (i << ADDRESS_SHIFT));
+        printk(KERN_INFO "RX CONF:\t%u: %u\n", i, kbuf[i]);
       }
+
+      mutex_unlock(&baseband_rx_lock);
+
       kfree(kbuf);
       break;
 
@@ -550,15 +565,21 @@ static long baseband_ioctl(struct file *file, unsigned int cmd, unsigned long ar
       // Confusingly, some of the registers are encoded differently than arg.
       // arg -> 0 means bypass the baseband, arg -> 1 means use the baseband.
 
+      mutex_lock(&baseband_rx_lock);
+
       if (arg) {
+        baseband_rx_enabled = true;
         iowrite32(1, baseband_registers + SPLITTER_BYPASS_SEL); // disable bypass in splitter
         iowrite32(0, baseband_registers + STREAM_OUT_SEL);      // choose bb input
         iowrite32(0, baseband_registers + SPLITTER_BB_SEL);     // enable bb in splitter
       } else {
+        baseband_rx_enabled = false;
         iowrite32(1, baseband_registers + SPLITTER_BB_SEL);     // disable bb in splitter
         iowrite32(1, baseband_registers + STREAM_OUT_SEL);      // choose bypass input
         iowrite32(0, baseband_registers + SPLITTER_BYPASS_SEL); // enable bypass in splitter
       }
+
+      mutex_unlock(&baseband_rx_lock);
       break;
 
     default:
