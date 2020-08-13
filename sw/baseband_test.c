@@ -19,7 +19,7 @@ int main(int argc, const char* argv[])
     return -1;
   }
 
-  uint16_t cc_constr[] = { 0x1, 0x3 }; 
+  uint16_t cc_constr[] = { 0x1, 0x3 };
   pilot_tone pilots[] = {
     [0 ... 7].real = 1.0,
     [0 ... 7].imag = 1.0,
